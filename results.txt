@@ -1,0 +1,5 @@
+xuyxu repo standard values: NMI: 0.667 | ARI: 0.572
+mnist.py --lamda 0.05 --pre-epoch 50 --epoch 50 --latent_dim 10 | NMI: 0.629 | ARI: 0.474
+mnist.py --lamda 0.05 --pre-epoch 50 --epoch 50 --latent_dim 5  | NMI: 0.604 | ARI: 0.442
+mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 10  | NMI: 0.639 | ARI: 0.500
+mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 3 | NMI: 0.617 | ARI: 0.506
