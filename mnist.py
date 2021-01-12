@@ -38,8 +38,8 @@ def solver(args, model, train_loader, test_loader):
         nmi_list.append(NMI)
         ari_list.append(ARI)
         
-        print('\nEpoch: {:02d} | NMI: {:.3f} | ARI: {:.3f}\n'.format(
-            e, NMI, ARI))
+        print('Epoch: {:02d} | NMI: {:.3f} | ARI: {:.3f}'.format(
+            e+1, NMI, ARI))
 
     return rec_loss_list, nmi_list, ari_list
 

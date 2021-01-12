@@ -21,7 +21,7 @@ class DCN(nn.Module):
             raise ValueError(msg.format(self.beta))
         
         if not self.lamda > 0:
-            msg = 'lambda should be greater than 0 but got value = {}.'
+            msg = 'lamda should be greater than 0 but got value = {}.'
             raise ValueError(msg.format(self.lamda))
         
         if len(self.args.hidden_dims) == 0:
