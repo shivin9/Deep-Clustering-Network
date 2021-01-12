@@ -53,8 +53,6 @@ if __name__ == '__main__':
                         help='dataset directory')
     parser.add_argument('--input-dim', type=int, default=28*28, 
                         help='input dimension')
-    parser.add_argument('--n-classes', type=int, default=10, 
-                        help='output dimension')
 
     # Training parameters
     parser.add_argument('--lr', type=float, default=1e-4, 
@@ -74,9 +72,9 @@ if __name__ == '__main__':
     parser.add_argument('--beta', type=float, default=1, 
                         help='coefficient of the regularization term on ' \
                             'clustering')
-    parser.add_argument('--hidden-dims', default=[500, 500, 2000, 10], 
+    parser.add_argument('--hidden-dims', default=[500, 500, 2000, 3], 
                         help='learning rate (default: 1e-4)')
-    parser.add_argument('--latent_dim', type=int, default=10, 
+    parser.add_argument('--latent_dim', type=int, default=3, 
                         help='latent space dimension')
     parser.add_argument('--n-clusters', type=int, default=10, 
                         help='number of clusters in the latent space')
@@ -97,7 +95,7 @@ if __name__ == '__main__':
                                       transforms.Normalize((0.1307,),
                                                            (0.3081,))])
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(args.dir, train=True, download=False, 
+        datasets.MNIST(args.dir, train=True, download=True, 
                        transform=transformer), 
         batch_size=args.batch_size, shuffle=False)
     

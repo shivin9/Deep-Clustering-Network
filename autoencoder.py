@@ -13,11 +13,11 @@ class AutoEncoder(nn.Module):
         self.dims_list = (args.hidden_dims + 
                           args.hidden_dims[:-1][::-1])  # mirrored structure
         self.n_layers = len(self.dims_list)
-        self.n_classes = args.n_classes
+        self.n_clusters = args.n_clusters
         
         # Validation check
         assert self.n_layers % 2 > 0
-        assert self.dims_list[self.n_layers // 2] == self.n_classes
+        assert self.dims_list[self.n_layers // 2] == args.latent_dim
         
         # Encoder Network
         layers = OrderedDict()
@@ -60,7 +60,7 @@ class AutoEncoder(nn.Module):
                 repr_str += '{}-'.format(dim)
         repr_str += str(self.output_dim) + '\n'
         repr_str += '[n_layers]: {}'.format(self.n_layers) + '\n'
-        repr_str += '[n_classes]: {}'.format(self.n_classes) + '\n'
+        repr_str += '[n_clusters]: {}'.format(self.n_clusters) + '\n'
         repr_str += '[input_dims]: {}'.format(self.input_dim)
         return repr_str
     

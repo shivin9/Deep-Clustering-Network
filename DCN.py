@@ -13,7 +13,7 @@ class DCN(nn.Module):
         self.args = args
         self.beta = args.beta  # coefficient of the clustering term 
         self.lamda = args.lamda  # coefficient of the reconstruction term
-        self.device = torch.device('cuda' if args.cuda else 'cpu')
+        self.device = torch.device('cuda:2' if args.cuda else 'cpu')
         
         # Validation check
         if not self.beta > 0:
@@ -23,11 +23,6 @@ class DCN(nn.Module):
         if not self.lamda > 0:
             msg = 'lambda should be greater than 0 but got value = {}.'
             raise ValueError(msg.format(self.lamda))
-        
-        if not self.args.n_clusters == self.args.n_classes:
-            msg = '`args.n_clusters = {} should equal `args.n_classes = {}`.'
-            raise ValueError(msg.format(self.args.n_clusters,
-                                        self.args.n_classes))
         
         if len(self.args.hidden_dims) == 0:
             raise ValueError('No hidden layer specified.')
