@@ -1,28 +1,19 @@
 ### DCN: Deep Clustering Network
-I found the official implementation of deep clustering network (DCN) is outdated (https://github.com/boyangumn/DCN-New). This repo is a re-implementation of DCN using PyTorch.
 
-#### Introduction
-An interesting work that jointly performs unsupervised dimension reduction and clustering using a neural network autoencoder.
+Forked from xuyxu (https://github.com/xuyxu/Deep-Clustering-Network)
 
-#### How to run
-Here I offer a demo on training DCN on the MNIST dataset (corresponding to Section 5.2.5 in the raw paper). To run this demo, simply type the following command:
+# Results
 
-```
-python mnist.py
-```
 
-#### Experiment
-I trained the DCN model on MNIST dataset, hyper-parameters like network structure were set as values reported in the paper. The left figure presents the reconstruction error of the autoencoder during the pre-training stage, and the right figure presents changes on NMI and ARI (two metrics employed in the paper) during the training stage. The best NMI result I have got is around 0.65.
+| NMI | ARI | parameters |
+|-----|-----|------------|
+| 0.667 | 0.572 | xuyxu repo standard values |
+| 0.629 | 0.474 | mnist.py --lamda 0.05 --pre-epoch 50 --epoch 50 --latent_dim 10 |
+| 0.604 | 0.442 | mnist.py --lamda 0.05 --pre-epoch 50 --epoch 50 --latent_dim 5|
+| 0.639 | 0.500 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 10|
+| 0.617 | 0.506 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 3 |
+| 0.685 | 0.492 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 3 --lr 0.01 |
+|-----|-----|------------|
+|0.81|0.73| original paper claim, pre-/eps 50, lamda 0.05, 4-layer 500-500-2000-10|
 
-![MNIST Experiment Result](./mnist_exp.png)
 
-#### Package dependency
-* scikit-lean==0.23.1
-* pytorch==1.6.0
-* torchvision==0.7.0
-* joblib==0.16.0
-
-In my practice, this implementation also works fine on PyTorch 0.4.1. Feel free to open an issue if there were incompatibility problems.
-
-#### Reference
-* Yang et al. ''Towards K-means-friendly Spaces: Simultaneous Deep Learning and Clustering'', ICML-2017 (https://arxiv.org/pdf/1610.04794.pdf)
