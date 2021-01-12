@@ -9,6 +9,7 @@ Forked from xuyxu (https://github.com/xuyxu/Deep-Clustering-Network)
 |-----|-----|------------|
 | 0.667 | 0.572 | xuyxu repo standard values |
 | 0.685 | 0.492 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 3 --lr 0.01 |
+| 0.670 | 0.531 | mnist.py --lamda 0.5 --pre-epoch 30 --epoch 50 --latent_dim 3 --lr 0.005|
 | 0.639 | 0.500 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 10|
 | 0.636 | 0.506 | mnist.py --lamda 0.5 --pre-epoch 20 --epoch 50 --latent_dim 3 --lr 0.02 |
 | 0.631 | 0.530 | mnist.py --lamda 0.5 --pre-epoch 50 --epoch 50 --latent_dim 10 --lr 0.005|
