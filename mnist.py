@@ -25,7 +25,7 @@ def evaluate(model, test_loader):
 
 def solver(args, model, train_loader, test_loader):
     
-    rec_loss_list = model.pretrain(train_loader)
+    rec_loss_list = model.pretrain(train_loader, epoch=args.pre_epoch)
     nmi_list = []
     ari_list = []
 
@@ -63,6 +63,9 @@ if __name__ == '__main__':
                         help='input batch size for training')
     parser.add_argument('--epoch', type=int, default=100, 
                         help='number of epochs to train')
+    parser.add_argument('--pre-epoch', type=int, default=50, 
+                        help='number of pre-train epochs')
+
     parser.add_argument('--pretrain', type=bool, default=True, 
                         help='whether use pre-training')
     
@@ -72,7 +75,7 @@ if __name__ == '__main__':
     parser.add_argument('--beta', type=float, default=1, 
                         help='coefficient of the regularization term on ' \
                             'clustering')
-    parser.add_argument('--hidden-dims', default=[500, 500, 2000, 3], 
+    parser.add_argument('--hidden-dims', default=[500, 500, 2000], 
                         help='learning rate (default: 1e-4)')
     parser.add_argument('--latent_dim', type=int, default=3, 
                         help='latent space dimension')

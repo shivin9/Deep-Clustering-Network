@@ -10,6 +10,7 @@ class AutoEncoder(nn.Module):
         self.input_dim = args.input_dim
         self.output_dim = self.input_dim
         self.hidden_dims = args.hidden_dims
+        self.hidden_dims.append(args.latent_dim)
         self.dims_list = (args.hidden_dims + 
                           args.hidden_dims[:-1][::-1])  # mirrored structure
         self.n_layers = len(self.dims_list)
