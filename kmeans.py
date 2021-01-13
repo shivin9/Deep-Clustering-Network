@@ -15,9 +15,9 @@ class batch_KMeans(object):
     
     def __init__(self, args):
         self.args = args
-        self.n_features = args.latent_dim
+        self.latent_dim = args.latent_dim
         self.n_clusters = args.n_clusters
-        self.clusters = np.zeros((self.n_clusters, self.n_features))
+        self.clusters = np.zeros((self.n_clusters, self.latent_dim))
         self.count = 100 * np.ones((self.n_clusters))  # serve as learning rate
         self.n_jobs = args.n_jobs
     

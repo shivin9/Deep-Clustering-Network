@@ -16,7 +16,7 @@ def evaluate(model, test_loader):
         latent_X = latent_X.detach().cpu().numpy()
 
         y_test.append(target.view(-1, 1).numpy())
-        y_pred.append(model.kmeans.update_assign(latent_X).reshape(-1, 1))
+        y_pred.append(model.clustering.update_assign(latent_X).reshape(-1, 1))
     
     y_test = np.vstack(y_test).reshape(-1)
     y_pred = np.vstack(y_pred).reshape(-1)

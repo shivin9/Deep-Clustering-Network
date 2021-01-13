@@ -3,6 +3,8 @@ import numbers
 import numpy as np
 import torch.nn as nn
 from kmeans import batch_KMeans
+from meanshift import batch_MeanShift
+
 from autoencoder import AutoEncoder
 
 
@@ -27,7 +29,8 @@ class DCN(nn.Module):
         if len(self.args.hidden_dims) == 0:
             raise ValueError('No hidden layer specified.')
         
-        self.kmeans = batch_KMeans(args)
+#         self.clustering = batch_KMeans(args)
+        self.clustering = batch_MeanShift(args)
         self.autoencoder = AutoEncoder(args).to(self.device)
         
         self.criterion  = nn.MSELoss(reduction='sum')
@@ -46,7 +49,7 @@ class DCN(nn.Module):
         
         # Regularization term on clustering
         dist_loss = torch.tensor(0.).to(self.device)
-        clusters = torch.FloatTensor(self.kmeans.clusters).to(self.device)
+        clusters = torch.FloatTensor(self.clustering.clusters).to(self.device)
         for i in range(batch_size):
             diff_vec = latent_X[i] - clusters[cluster_id[i]]
             sample_dist_loss = torch.matmul(diff_vec.view(1, -1),
@@ -93,7 +96,7 @@ class DCN(nn.Module):
         if verbose:
             print('========== End pretraining ==========\n')
         
-        # Initialize clusters in self.kmeans after pre-training
+        # Initialize clusters in self.clustering after pre-training
         batch_X = []
         for batch_idx, (data, _) in enumerate(train_loader):
             batch_size = data.size()[0]
@@ -101,7 +104,7 @@ class DCN(nn.Module):
             latent_X = self.autoencoder(data, latent=True)
             batch_X.append(latent_X.detach().cpu().numpy())
         batch_X = np.vstack(batch_X)
-        self.kmeans.init_cluster(batch_X)
+        self.clustering.init_cluster(batch_X)
         
         return rec_loss_list
     
@@ -117,16 +120,16 @@ class DCN(nn.Module):
                 latent_X = latent_X.cpu().numpy()
             
             # [Step-1] Update the assignment results
-            cluster_id = self.kmeans.update_assign(latent_X)
+            cluster_id = self.clustering.update_assign(latent_X)
             
-            # [Step-2] Update clusters in bath Kmeans
+            # [Step-2] Update clusters in batch Clustering
             elem_count = np.bincount(cluster_id, 
                                      minlength=self.args.n_clusters)
             for k in range(self.args.n_clusters):
                 # avoid empty slicing
                 if elem_count[k] == 0:
                     continue
-                self.kmeans.update_cluster(latent_X[cluster_id == k], k)
+                self.clustering.update_cluster(latent_X[cluster_id == k], k)
             
             # [Step-3] Update the network parameters         
             loss, rec_loss, dist_loss = self._loss(data, cluster_id)
