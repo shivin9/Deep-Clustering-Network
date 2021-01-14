@@ -5,6 +5,7 @@ from DCN import DCN
 from torchvision import datasets, transforms
 from sklearn.metrics import adjusted_rand_score
 from sklearn.metrics import normalized_mutual_info_score
+from torch.utils.data import Subset
 
 def evaluate(model, test_loader):
     y_test = []
@@ -59,7 +60,7 @@ if __name__ == '__main__':
                         help='learning rate (default: 1e-4)')
     parser.add_argument('--wd', type=float, default=5e-4, 
                         help='weight decay (default: 5e-4)')
-    parser.add_argument('--batch-size', type=int, default=256, 
+    parser.add_argument('--batch-size', type=int, default=128, 
                         help='input batch size for training')
     parser.add_argument('--epoch', type=int, default=100, 
                         help='number of epochs to train')
@@ -77,34 +78,46 @@ if __name__ == '__main__':
                             'clustering')
     parser.add_argument('--hidden-dims', default=[500, 500, 2000], 
                         help='learning rate (default: 1e-4)')
-    parser.add_argument('--latent_dim', type=int, default=3, 
+    parser.add_argument('--latent-dim', type=int, default=3, 
                         help='latent space dimension')
     parser.add_argument('--n-clusters', type=int, default=10, 
                         help='number of clusters in the latent space')
+    parser.add_argument('--clustering', type=str, default='kmeans', 
+                        help='choose a clustering method (default: kmeans)' \
+                       ' meanshift, tba')
+
 
     # Utility parameters
     parser.add_argument('--n-jobs', type=int, default=1, 
                         help='number of jobs to run in parallel')
-    parser.add_argument('--cuda', type=bool, default=True, 
-                        help='whether to use GPU')
-    parser.add_argument('--log-interval', type=int, default=100, 
+    parser.add_argument('--device', type=str, default='cpu', 
+                        help='device for computation (default: cpu)')
+    parser.add_argument('--log-interval', type=int, default=200, 
                         help='how many batches to wait before logging the ' \
                             'training status')
+    parser.add_argument('--test-run', action='store_true', 
+                        help='short test run on a few instances of the dataset')
 
+    
     args = parser.parse_args()
     
     # Load data
     transformer = transforms.Compose([transforms.ToTensor(),
                                       transforms.Normalize((0.1307,),
                                                            (0.3081,))])
-    train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(args.dir, train=True, download=True, 
-                       transform=transformer), 
-        batch_size=args.batch_size, shuffle=False)
+
     
-    test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(args.dir, train=False, transform=transformer), 
+    train_set = datasets.MNIST(args.dir, train=True, download=True, transform=transformer)
+    test_set  = datasets.MNIST(args.dir, train=False, transform=transformer)
+    train_limit = list(range(0, len(train_set))) if not args.test_run else list(range(0, 500))    
+    test_limit  = list(range(0, len(test_set)))  if not args.test_run else list(range(0, 500))    
+
+    
+    train_loader = torch.utils.data.DataLoader(Subset(train_set, train_limit),
         batch_size=args.batch_size, shuffle=True)
+    
+    test_loader = torch.utils.data.DataLoader(Subset(test_set, test_limit), 
+        batch_size=args.batch_size, shuffle=False)
 
     # Main body
     model = DCN(args)    

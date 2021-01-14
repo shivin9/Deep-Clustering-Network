@@ -15,7 +15,7 @@ class DCN(nn.Module):
         self.args = args
         self.beta = args.beta  # coefficient of the clustering term 
         self.lamda = args.lamda  # coefficient of the reconstruction term
-        self.device = torch.device('cuda:2' if args.cuda else 'cpu')
+        self.device = torch.device(args.device)
         
         # Validation check
         if not self.beta > 0:
@@ -29,8 +29,13 @@ class DCN(nn.Module):
         if len(self.args.hidden_dims) == 0:
             raise ValueError('No hidden layer specified.')
         
-#         self.clustering = batch_KMeans(args)
-        self.clustering = batch_MeanShift(args)
+        if args.clustering == 'kmeans':
+            self.clustering = batch_KMeans(args)
+        elif args.clustering == 'meanshift':
+            self.clustering = batch_MeanShift(args)
+        else:
+            raise RuntimeError('Error: no clustering chosen')
+            
         self.autoencoder = AutoEncoder(args).to(self.device)
         
         self.criterion  = nn.MSELoss(reduction='sum')
@@ -82,9 +87,9 @@ class DCN(nn.Module):
                 rec_X = self.autoencoder(data)
                 loss = self.criterion(data, rec_X)
                 
-                if verbose and batch_idx % self.args.log_interval == 0:
+                if verbose and (batch_idx+1) % self.args.log_interval == 0:
                     msg = 'Epoch: {:02d} | Batch: {:03d} | Rec-Loss: {:.3f}'
-                    print(msg.format(e, batch_idx, 
+                    print(msg.format(e, batch_idx+1, 
                                      loss.detach().cpu().numpy()))
                     rec_loss_list.append(loss.detach().cpu().numpy())
                 
@@ -137,10 +142,10 @@ class DCN(nn.Module):
             loss.backward()
             self.optimizer.step()
 
-            if verbose and batch_idx % self.args.log_interval == 0:
+            if verbose and (batch_idx+1) % self.args.log_interval == 0:
                 msg = 'Epoch: {:02d} | Batch: {:03d} | Loss: {:.3f} | Rec-' \
                       'Loss: {:.3f} | Dist-Loss: {:.3f}'
-                print(msg.format(epoch, batch_idx, 
+                print(msg.format(epoch, batch_idx+1, 
                                  loss.detach().cpu().numpy(),
                                  rec_loss, dist_loss))
         
