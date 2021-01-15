@@ -7,6 +7,7 @@ Forked from xuyxu (https://github.com/xuyxu/Deep-Clustering-Network)
 
 | NMI | ARI | parameters |
 |-----|-----|------------|
+| 0.800 | 0.689 | mnist.py --latent-dim 10 --epoch 50 --pre-epoch 50 --lamda 0.005 --lr 0.001 |
 | 0.793 | 0.676 | mnist.py --latent-dim 10 --epoch 50 --pre-epoch 50 --lamda 0.01 --lr 0.001 |
 | 0.758 | 0.647 | mnist.py --latent-dim 10 --epoch 50 --pre-epoch 50 --lamda 0.05 --lr 0.001|
 | 0.748 | 0.629 | mnist.py --latent-dim 10 --epoch 50 --pre-epoch 50 --lamda 0.05 |
