@@ -56,13 +56,13 @@ if __name__ == '__main__':
                         help='input dimension')
 
     # Training parameters
-    parser.add_argument('--lr', type=float, default=1e-4, 
+    parser.add_argument('--lr', type=float, default=0.002, 
                         help='learning rate (default: 1e-4)')
     parser.add_argument('--wd', type=float, default=5e-4, 
                         help='weight decay (default: 5e-4)')
     parser.add_argument('--batch-size', type=int, default=128, 
                         help='input batch size for training')
-    parser.add_argument('--epoch', type=int, default=100, 
+    parser.add_argument('--epoch', type=int, default=50, 
                         help='number of epochs to train')
     parser.add_argument('--pre-epoch', type=int, default=50, 
                         help='number of pre-train epochs')
@@ -71,14 +71,14 @@ if __name__ == '__main__':
                         help='whether use pre-training')
     
     # Model parameters
-    parser.add_argument('--lamda', type=float, default=1, 
+    parser.add_argument('--lamda', type=float, default=0.005, 
                         help='coefficient of the reconstruction loss')
     parser.add_argument('--beta', type=float, default=1, 
                         help='coefficient of the regularization term on ' \
                             'clustering')
     parser.add_argument('--hidden-dims', default=[500, 500, 2000], 
                         help='learning rate (default: 1e-4)')
-    parser.add_argument('--latent-dim', type=int, default=3, 
+    parser.add_argument('--latent-dim', type=int, default=10, 
                         help='latent space dimension')
     parser.add_argument('--n-clusters', type=int, default=10, 
                         help='number of clusters in the latent space')
@@ -92,7 +92,7 @@ if __name__ == '__main__':
                         help='number of jobs to run in parallel')
     parser.add_argument('--device', type=str, default='cpu', 
                         help='device for computation (default: cpu)')
-    parser.add_argument('--log-interval', type=int, default=200, 
+    parser.add_argument('--log-interval', type=int, default=400, 
                         help='how many batches to wait before logging the ' \
                             'training status')
     parser.add_argument('--test-run', action='store_true', 
