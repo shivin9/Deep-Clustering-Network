@@ -2,11 +2,10 @@ import torch
 import numbers
 import numpy as np
 import torch.nn as nn
+from cac import batch_cac
 from kmeans import batch_KMeans
 from meanshift import batch_MeanShift
-
 from autoencoder import AutoEncoder
-
 
 class DCN(nn.Module):
     
@@ -33,11 +32,12 @@ class DCN(nn.Module):
             self.clustering = batch_KMeans(args)
         elif args.clustering == 'meanshift':
             self.clustering = batch_MeanShift(args)
+        elif args.clustering == "cac":
+            self.clustering = batch_cac(args)
         else:
             raise RuntimeError('Error: no clustering chosen')
             
         self.autoencoder = AutoEncoder(args).to(self.device)
-        
         self.criterion  = nn.MSELoss(reduction='sum')
         self.optimizer = torch.optim.Adam(self.parameters(),
                                           lr=args.lr,
@@ -66,7 +66,6 @@ class DCN(nn.Module):
                 dist_loss.detach().cpu().numpy())
     
     def pretrain(self, train_loader, epoch=100, verbose=True):
-        
         if not self.args.pretrain:
             return
         
@@ -77,7 +76,7 @@ class DCN(nn.Module):
         if verbose:
             print('========== Start pretraining ==========')
         
-        rec_loss_list  =[]
+        rec_loss_list = []
         
         self.train()
         for e in range(epoch):
@@ -108,14 +107,14 @@ class DCN(nn.Module):
             data = data.to(self.device).view(batch_size, -1)
             latent_X = self.autoencoder(data, latent=True)
             batch_X.append(latent_X.detach().cpu().numpy())
+
         batch_X = np.vstack(batch_X)
         self.clustering.init_cluster(batch_X)
         
         return rec_loss_list
     
     def fit(self, epoch, train_loader, verbose=True):
-        
-        for batch_idx, (data, _) in enumerate(train_loader):
+        for batch_idx, (data, y) in enumerate(train_loader):
             batch_size = data.size()[0]
             data = data.view(batch_size, -1).to(self.device)
             
@@ -123,20 +122,26 @@ class DCN(nn.Module):
             with torch.no_grad():
                 latent_X = self.autoencoder(data, latent=True)
                 latent_X = latent_X.cpu().numpy()
+
+            if self.args.clustering == "cac":
+                cluster_id = self.clustering.cluster(latent_X, y, self.args.alpha)
+
+            else:
+                # [Step-1] Update the assignment results
+                cluster_id = self.clustering.update_assign(latent_X)
+                
+                # [Step-2] Update cluster centers in batch Clustering
+                elem_count = np.bincount(cluster_id, 
+                                         minlength=self.args.n_clusters)
+
+                for k in range(self.args.n_clusters):
+                    # avoid empty slicing
+                    if elem_count[k] == 0:
+                        continue
+                    # updating the cluster center
+                    self.clustering.update_cluster(latent_X[cluster_id == k], k)
             
-            # [Step-1] Update the assignment results
-            cluster_id = self.clustering.update_assign(latent_X)
-            
-            # [Step-2] Update clusters in batch Clustering
-            elem_count = np.bincount(cluster_id, 
-                                     minlength=self.args.n_clusters)
-            for k in range(self.args.n_clusters):
-                # avoid empty slicing
-                if elem_count[k] == 0:
-                    continue
-                self.clustering.update_cluster(latent_X[cluster_id == k], k)
-            
-            # [Step-3] Update the network parameters         
+            # [Step-3] Update the network parameters
             loss, rec_loss, dist_loss = self._loss(data, cluster_id)
             self.optimizer.zero_grad()
             loss.backward()
