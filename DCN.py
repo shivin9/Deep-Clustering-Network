@@ -102,14 +102,18 @@ class DCN(nn.Module):
         
         # Initialize clusters in self.clustering after pre-training
         batch_X = []
-        for batch_idx, (data, _) in enumerate(train_loader):
+        batch_y = []
+        for batch_idx, (data, y) in enumerate(train_loader):
             batch_size = data.size()[0]
             data = data.to(self.device).view(batch_size, -1)
             latent_X = self.autoencoder(data, latent=True)
             batch_X.append(latent_X.detach().cpu().numpy())
+            batch_y.append(y)
 
         batch_X = np.vstack(batch_X)
-        self.clustering.init_cluster(batch_X)
+        batch_y = np.vstack(batch_y)
+
+        self.clustering.init_cluster(batch_X, batch_y)
         
         return rec_loss_list
     
