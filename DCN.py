@@ -111,7 +111,7 @@ class DCN(nn.Module):
             batch_y.append(y)
 
         batch_X = np.vstack(batch_X)
-        batch_y = np.vstack(batch_y)
+        batch_y = np.hstack(batch_y)
 
         self.clustering.init_cluster(batch_X, batch_y)
         

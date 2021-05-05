@@ -10,62 +10,61 @@ from matplotlib import pyplot as plt
 def update(X, y, cluster_stats, labels, centers, positive_centers, negative_centers, k):
     beta = -10
     for iteration in range(0, 10):
-    # print(cluster_stats)
-    N = len(X)
-    cluster_label = []
-    for index_point in range(N):
-        distance = {}
-        pt = X[index_point]
-        pt_label = y[index_point]
-        cluster_id = labels[index_point]
-        p, n = cluster_stats[cluster_id][0], cluster_stats[cluster_id][1]
-        new_cluster = old_cluster = labels[index_point]
-        old_err = np.zeros(k)
-        # Ensure that degeneracy is not happening
-        if ~((p == 1 and pt_label == 1) or (n == 1 and pt_label == 0)):
-            for cluster_id in range(0, k):
-                if cluster_id != old_cluster:
-                    distance[cluster_id] = calculate_gamma_new(pt, pt_label,\
-                                            centers[cluster_id], positive_centers[cluster_id],\
-                                            negative_centers[cluster_id], cluster_stats[cluster_id], alpha)
-                else:
-                    distance[cluster_id] = np.infty
+        N = len(X)
+        cluster_label = []
+        for index_point in range(N):
+            distance = {}
+            pt = X[index_point]
+            pt_label = y[index_point]
+            cluster_id = labels[index_point]
+            p, n = cluster_stats[cluster_id][0], cluster_stats[cluster_id][1]
+            new_cluster = old_cluster = labels[index_point]
+            old_err = np.zeros(k)
+            # Ensure that degeneracy is not happening
+            if ~((p == 1 and pt_label == 1) or (n == 1 and pt_label == 0)):
+                for cluster_id in range(0, k):
+                    if cluster_id != old_cluster:
+                        distance[cluster_id] = calculate_gamma_new(pt, pt_label,\
+                                                centers[cluster_id], positive_centers[cluster_id],\
+                                                negative_centers[cluster_id], cluster_stats[cluster_id], alpha)
+                    else:
+                        distance[cluster_id] = np.infty
 
-            old_gamma = calculate_gamma_old(pt, pt_label,\
-                                            centers[old_cluster], positive_centers[old_cluster],\
-                                            negative_centers[old_cluster], cluster_stats[old_cluster], alpha)
-            # new update condition
-            new_cluster = min(distance, key=distance.get)
-            new_gamma = distance[new_cluster]
+                old_gamma = calculate_gamma_old(pt, pt_label,\
+                                                centers[old_cluster], positive_centers[old_cluster],\
+                                                negative_centers[old_cluster], cluster_stats[old_cluster], alpha)
+                # new update condition
+                new_cluster = min(distance, key=distance.get)
+                new_gamma = distance[new_cluster]
 
-            if beta < old_gamma + new_gamma < 0:
-                # Remove point from old cluster
-                p, n = cluster_stats[old_cluster] # Old cluster statistics
-                t = p + n
+                if beta < old_gamma + new_gamma < 0:
+                    # Remove point from old cluster
+                    p, n = cluster_stats[old_cluster] # Old cluster statistics
+                    t = p + n
 
-                centers[old_cluster] = (t/(t-1))*centers[old_cluster] - (1/(t-1))*pt
+                    centers[old_cluster] = (t/(t-1))*centers[old_cluster] - (1/(t-1))*pt
 
-                if pt_label == 0:
-                    negative_centers[old_cluster] = (n/(n-1))*negative_centers[old_cluster] - (1/(n-1)) * pt
-                    cluster_stats[old_cluster][1] -= 1
+                    if pt_label == 0:
+                        negative_centers[old_cluster] = (n/(n-1))*negative_centers[old_cluster] - (1/(n-1)) * pt
+                        cluster_stats[old_cluster][1] -= 1
 
-                else:
-                    positive_centers[old_cluster] = (p/(p-1))*positive_centers[old_cluster] - (1/(p-1)) * pt
-                    cluster_stats[old_cluster][0] -= 1
+                    else:
+                        positive_centers[old_cluster] = (p/(p-1))*positive_centers[old_cluster] - (1/(p-1)) * pt
+                        cluster_stats[old_cluster][0] -= 1
 
-                # Add point to new cluster
-                p, n = cluster_stats[new_cluster] # New cluster statistics
-                t = p + n
-                centers[new_cluster] = (t/(t+1))*centers[new_cluster] + (1/(t+1))*pt
+                    # Add point to new cluster
+                    p, n = cluster_stats[new_cluster] # New cluster statistics
+                    t = p + n
+                    centers[new_cluster] = (t/(t+1))*centers[new_cluster] + (1/(t+1))*pt
 
-                if pt_label == 0:
-                    negative_centers[new_cluster] = (n/(n+1))*negative_centers[new_cluster] + (1/(n+1)) * pt
-                    cluster_stats[new_cluster][1] += 1
+                    if pt_label == 0:
+                        negative_centers[new_cluster] = (n/(n+1))*negative_centers[new_cluster] + (1/(n+1)) * pt
+                        cluster_stats[new_cluster][1] += 1
 
-                else:
-                    positive_centers[new_cluster] = (p/(p+1))*positive_centers[new_cluster] + (1/(p+1)) * pt
-                    cluster_stats[new_cluster][0] += 1
-                labels[index_point] = new_cluster
+                    else:
+                        positive_centers[new_cluster] = (p/(p+1))*positive_centers[new_cluster] + (1/(p+1)) * pt
+                        cluster_stats[new_cluster][0] += 1
+                    labels[index_point] = new_cluster
 
     # for idp in range(N):
     #     pt = X[idp]

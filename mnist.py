@@ -64,7 +64,7 @@ if __name__ == '__main__':
                         help='input batch size for training')
     parser.add_argument('--epoch', type=int, default=50, 
                         help='number of epochs to train')
-    parser.add_argument('--pre-epoch', type=int, default=50, 
+    parser.add_argument('--pre-epoch', type=int, default=1, 
                         help='number of pre-train epochs')
 
     parser.add_argument('--pretrain', type=bool, default=True, 
