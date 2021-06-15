@@ -6,10 +6,16 @@ compute_euclidean_distance, calculate_gamma_old, calculate_gamma_new,\
 cac, get_new_accuracy, score
 import umap
 from matplotlib import pyplot as plt
+from sklearn.metrics import adjusted_rand_score as ari
 
-def update(X, y, cluster_stats, labels, centers, positive_centers, negative_centers, k):
-    beta = -10
-    for iteration in range(0, 10):
+def update(X, y, cluster_stats, labels, centers, positive_centers, negative_centers, k, alpha):
+    beta = -np.infty
+    total_iterations = 100
+    errors = np.zeros((total_iterations, k))
+    lbls = []
+    lbls.append(np.copy(labels))
+
+    for iteration in range(1, total_iterations):
         N = len(X)
         cluster_label = []
         for index_point in range(N):
@@ -66,11 +72,20 @@ def update(X, y, cluster_stats, labels, centers, positive_centers, negative_cent
                         cluster_stats[new_cluster][0] += 1
                     labels[index_point] = new_cluster
 
-    # for idp in range(N):
-    #     pt = X[idp]
-    #     cluster_id = labels[idp]
-    #     errors[iteration][cluster_id] += compute_euclidean_distance(pt, centers[cluster_id])-alpha*compute_euclidean_distance(positive_centers[cluster_id],\
-    #                                         negative_centers[cluster_id])
+        lbls.append(np.copy(labels))
+
+        for idp in range(N):
+            pt = X[idp]
+            cluster_id = labels[idp]
+            errors[iteration][cluster_id] += compute_euclidean_distance(pt, centers[cluster_id])-alpha*compute_euclidean_distance(positive_centers[cluster_id],\
+                                                negative_centers[cluster_id])
+
+        if ((lbls[iteration] == lbls[iteration-1]).all()) and iteration > 0:
+            print("converged at itr: ", iteration)
+            break
+    print("ARI(KM, CAC) = ", ari(lbls[0], lbls[-1]))
+
+    # print(errors, np.sum(errors, axis=1))
     return cluster_stats, labels, centers, positive_centers, negative_centers
 
 
@@ -79,13 +94,13 @@ class batch_cac(object):
         self.args = args
         self.latent_dim = args.latent_dim
         self.n_clusters = args.n_clusters
-        self.cluster_stats = np.zeros((n_clusters,2))
-        self.cluster_centers = np.zeros((self.n_clusters, self.latent_dim))
+        self.cluster_stats = np.zeros((self.n_clusters,2))
+        self.clusters = np.zeros((self.n_clusters, self.latent_dim))
         self.positive_centers = np.zeros((self.n_clusters, self.latent_dim))
         self.negative_centers = np.zeros((self.n_clusters, self.latent_dim))
         self.count = 100 * np.ones((self.n_clusters))  # serve as learning rate
         self.n_jobs = args.n_jobs
-        self.reducer = umap.UMAP()
+        # self.reducer = umap.UMAP()
     
     def cluster(self, X, y, alpha):
         cluster_labels = predict_clusters(X, self.clusters)
@@ -97,10 +112,10 @@ class batch_cac(object):
         # update cluster centers after running CAC
         # self.clusters = clusters[1][clustering][0]
 
-        self.cluster_stats, new_labels, self.positive_centers, self.negative_centers = update(X, y, cluster_stats, cluster_labels,\
-             self.cluster_centers, self.positive_centers, self.negative_centers, self.n_clusters)
+        self.cluster_stats, new_labels, self.clusters, self.positive_centers, self.negative_centers = update(X, y, self.cluster_stats, cluster_labels,\
+             self.clusters, self.positive_centers, self.negative_centers, self.n_clusters, alpha)
 
-        # new_cluster_labels = predict_clusters(X, self.cluster_centers)
+        # new_cluster_labels = predict_clusters(X, self.clusters)
         return new_labels
     
     def init_cluster(self, X, y, indices=None):
@@ -114,13 +129,13 @@ class batch_cac(object):
         # c = [color[int(model.labels_[i])] for i in range(len(X2))] 
         # plt.scatter(X2[:,0], X2[:,1], color=c)
         # plt.show()
-        self.cluster_centers = model.cluster_centers_  # copy clusters
+        self.clusters = model.cluster_centers_  # copy clusters
         labels = model.labels_
 
         for j in range(self.n_clusters):
             pts_index = np.where(labels == j)[0]
             cluster_pts = X[pts_index]        
-            centers[j,:] = cluster_pts.mean(axis=0)
+            self.clusters[j,:] = cluster_pts.mean(axis=0)
             n_class_index = np.where(y[pts_index] == 0)[0]
             p_class_index = np.where(y[pts_index] == 1)[0]
 

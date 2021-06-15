@@ -88,7 +88,7 @@ if __name__ == '__main__':
 
 
     # Utility parameters
-    parser.add_argument('--n-jobs', type=int, default=1, 
+    parser.add_argument('--n-jobs', type=int, default=6, 
                         help='number of jobs to run in parallel')
     parser.add_argument('--device', type=str, default='cpu', 
                         help='device for computation (default: cpu)')
@@ -107,8 +107,8 @@ if __name__ == '__main__':
                                                            (0.3081,))])
 
     
-    train_set = datasets.FashionMNIST(args.dir, train=True, download=True, transform=transformer)
-    test_set  = datasets.FashionMNIST(args.dir, train=False, transform=transformer)
+    train_set = datasets.MNIST(args.dir, train=True, download=True, transform=transformer)
+    test_set  = datasets.MNIST(args.dir, train=False, transform=transformer)
     train_limit = list(range(0, len(train_set))) if not args.test_run else list(range(0, 500))    
     test_limit  = list(range(0, len(test_set)))  if not args.test_run else list(range(0, 500))    
 

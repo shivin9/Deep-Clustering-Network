@@ -6,6 +6,7 @@ from cac import batch_cac
 from kmeans import batch_KMeans
 from meanshift import batch_MeanShift
 from autoencoder import AutoEncoder
+from sklearn.metrics import davies_bouldin_score as dbs, adjusted_rand_score as ari
 
 class DCN(nn.Module):
     
@@ -55,11 +56,21 @@ class DCN(nn.Module):
         # Regularization term on clustering
         dist_loss = torch.tensor(0.).to(self.device)
         clusters = torch.FloatTensor(self.clustering.clusters).to(self.device)
+
         for i in range(batch_size):
             diff_vec = latent_X[i] - clusters[cluster_id[i]]
             sample_dist_loss = torch.matmul(diff_vec.view(1, -1),
                                             diff_vec.view(-1, 1))
             dist_loss += 0.5 * self.beta * torch.squeeze(sample_dist_loss)
+            
+            if self.args.clustering == "cac":
+                positive_clusters = torch.FloatTensor(self.clustering.positive_centers).to(self.device)
+                negative_clusters = torch.FloatTensor(self.clustering.negative_centers).to(self.device)
+                diff_vec = positive_clusters[cluster_id[i]] - negative_clusters[cluster_id[i]]
+                sample_sep_loss = torch.matmul(diff_vec.view(1, -1),
+                                                diff_vec.view(-1, 1))
+
+                dist_loss -= self.args.alpha * torch.squeeze(sample_sep_loss)
         
         return (rec_loss + dist_loss, 
                 rec_loss.detach().cpu().numpy(),
@@ -85,7 +96,6 @@ class DCN(nn.Module):
                 data = data.to(self.device).view(batch_size, -1)
                 rec_X = self.autoencoder(data)
                 loss = self.criterion(data, rec_X)
-                
                 if verbose and (batch_idx+1) % self.args.log_interval == 0:
                     msg = 'Epoch: {:02d} | Batch: {:03d} | Rec-Loss: {:.3f}'
                     print(msg.format(e, batch_idx+1, 
@@ -133,9 +143,9 @@ class DCN(nn.Module):
             else:
                 # [Step-1] Update the assignment results
                 cluster_id = self.clustering.update_assign(latent_X)
-                
+
                 # [Step-2] Update cluster centers in batch Clustering
-                elem_count = np.bincount(cluster_id, 
+                elem_count = np.bincount(cluster_id,
                                          minlength=self.args.n_clusters)
 
                 for k in range(self.args.n_clusters):
@@ -147,6 +157,9 @@ class DCN(nn.Module):
             
             # [Step-3] Update the network parameters
             loss, rec_loss, dist_loss = self._loss(data, cluster_id)
+            print(loss)
+            # print(dbs(data, cluster_id))
+            print("ARI: ", ari(cluster_id, y))
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -157,4 +170,3 @@ class DCN(nn.Module):
                 print(msg.format(epoch, batch_idx+1, 
                                  loss.detach().cpu().numpy(),
                                  rec_loss, dist_loss))
-        

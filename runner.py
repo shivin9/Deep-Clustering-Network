@@ -1,7 +1,6 @@
 import torch
 import argparse
 import numpy as np
-import umap
 from DCN import DCN
 from torchvision import datasets, transforms
 from sklearn.metrics import adjusted_rand_score
@@ -12,6 +11,8 @@ from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split 
 from sklearn.preprocessing import StandardScaler
 from matplotlib import pyplot as plt
+import pacmap
+from sklearn.datasets import make_blobs
 
 color = ['grey', 'red', 'blue', 'pink', 'brown', 'black', 'magenta', 'purple', 'orange', 'cyan', 'olive']
 
@@ -32,8 +33,8 @@ def evaluate(model, test_loader):
     return (normalized_mutual_info_score(y_test, y_pred),
             adjusted_rand_score(y_test, y_pred))
 
-
 def solver(args, model, train_loader, test_loader):
+    
     rec_loss_list = model.pretrain(train_loader, epoch=args.pre_epoch)
     nmi_list = []
     ari_list = []
@@ -53,8 +54,8 @@ def solver(args, model, train_loader, test_loader):
     return rec_loss_list, nmi_list, ari_list
 
 
-def create_imbalanced_data_clusters(n_samples=1000, n_features=8, n_informative=5, n_classes=2,\
-                            n_clusters = 3, frac=0.2, outer_class_sep=1, inner_class_sep=0.5, clus_per_class=2, seed=0):
+def create_imbalanced_data_clusters(n_samples=10000, n_features=45, n_informative=35, n_classes=2,\
+                            n_clusters = 2, frac=0.2, outer_class_sep=1.5, inner_class_sep=0.1, clus_per_class=2, seed=0):
     np.random.seed(seed)
     X = np.empty(shape=n_features)
     Y = np.empty(shape=1)
@@ -81,6 +82,17 @@ def create_imbalanced_data_clusters(n_samples=1000, n_features=8, n_informative=
     return X, Y
 
 
+def paper_synthetic(n_pts=1000, centers=4):
+    X, y = make_blobs(n_pts, centers=centers)
+    W = np.random.randn(10,2)
+    U = np.random.randn(100,10)
+    X1 = W.dot(X.T)
+    X1 = X1*(X1>0)
+    X2 = U.dot(X1)
+    X2 = X2*(X2>0)
+    return X2.T, y
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Deep Clustering Network')
@@ -103,7 +115,7 @@ if __name__ == '__main__':
                         help='input batch size for training')
     parser.add_argument('--epoch', type=int, default=10, 
                         help='number of epochs to train')
-    parser.add_argument('--pre-epoch', type=int, default=5, 
+    parser.add_argument('--pre-epoch', type=int, default=100, 
                         help='number of pre-train epochs')
     parser.add_argument('--pretrain', type=bool, default=True, 
                         help='whether use pre-training')
@@ -131,7 +143,7 @@ if __name__ == '__main__':
                         help='number of jobs to run in parallel')
     parser.add_argument('--device', type=str, default='cpu',
                         help='device for computation (default: cpu)')
-    parser.add_argument('--log-interval', type=int, default=100,
+    parser.add_argument('--log-interval', type=int, default=10,
                         help='how many batches to wait before logging the ' \
                             'training status')
     parser.add_argument('--test-run', action='store_true',
@@ -145,10 +157,18 @@ if __name__ == '__main__':
             y = pd.read_csv(args.dir + "y_new.csv")
 
         elif args.dir == "synthetic":
-            X, y = create_imbalanced_data_clusters(seed=0)
+            n_feat = 45
+            X, y = create_imbalanced_data_clusters(n_clusters=2, n_features = n_feat, inner_class_sep=0.4, seed=0)
             X = pd.DataFrame(X)
             y = pd.DataFrame(y)
-            args.input_dim = 8
+            args.input_dim = n_feat
+
+        elif args.dir == "paper_synthetic":
+            n_feat = 100
+            X, y = paper_synthetic(10000)
+            X = pd.DataFrame(X)
+            y = pd.DataFrame(y)
+            args.input_dim = n_feat
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
         
@@ -191,12 +211,29 @@ if __name__ == '__main__':
 
     # X_train = X_train.to(self.device)
     # print(y_train[0])
-    out = model.autoencoder(torch.FloatTensor(np.array(X_train)), latent=True)
-    reducer = umap.UMAP()
-    # print(help(umap))
-    X2 = reducer.fit_transform(out.detach().numpy())
-    c = [color[int(y_train.iloc[i])] for i in range(len(y_train))]
-    plt.scatter(X2[:,0], X2[:,1], color=c); plt.show()
-
+    out = model.autoencoder(torch.FloatTensor(np.array(X_train)).to(args.device), latent=True)
+    reducer = pacmap.PaCMAP()
+    X2 = reducer.fit_transform(out.cpu().detach().numpy())
     X4 = reducer.fit_transform(X_train)
-    plt.scatter(X4[:,0], X4[:,1], color=c); plt.show()
+    c_train = [color[int(y_train.iloc[i])] for i in range(len(y_train))]
+
+    figure = plt.figure()
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.suptitle('Normal vs CAC Embeddings')
+    ax1.scatter(X4[:,0], X4[:,1], color=c_train);
+    ax2.scatter(X2[:,0], X2[:,1], color=c_train); plt.show()
+    figure.savefig("normal_vs_cac.png", dpi=figure.dpi)
+
+    # Testing
+    out = model.autoencoder(torch.FloatTensor(np.array(X_test)).to(args.device), latent=True)
+    reducer = pacmap.PaCMAP()
+    # print(help(umap))
+    X_t = reducer.fit_transform(out.cpu().detach().numpy())
+    c_test = [color[int(y_test.iloc[i])] for i in range(len(y_test))]
+
+    figure = plt.figure()
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.suptitle('CAC Training vs Testing Embeddings')
+    ax1.scatter(X2[:,0], X2[:,1], color=c_train);
+    ax2.scatter(X_t[:,0], X_t[:,1], color=c_test); plt.show()
+    figure.savefig("train_vs_test.png", dpi=figure.dpi)
