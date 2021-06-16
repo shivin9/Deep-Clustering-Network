@@ -24,9 +24,8 @@ def evaluate(model, test_loader):
         data = data.view(batch_size, -1).to(model.device)
         latent_X = model.autoencoder(data, latent=True)
         latent_X = latent_X.detach().cpu().numpy()
-
         y_test.append(target.view(-1, 1).numpy())
-        y_pred.append(model.clustering.update_assign(latent_X).reshape(-1, 1))
+        y_pred.append(model.clustering.update_assign(latent_X, target).reshape(-1, 1))
     
     y_test = np.vstack(y_test).reshape(-1)
     y_pred = np.vstack(y_pred).reshape(-1)
@@ -129,7 +128,7 @@ if __name__ == '__main__':
                             'clustering')
     parser.add_argument('--hidden-dims', default=[500, 500, 2000],
                         help='learning rate (default: 1e-4)')
-    parser.add_argument('--latent-dim', type=int, default=10,
+    parser.add_argument('--latent-dim', type=int, default=45,
                         help='latent space dimension')
     parser.add_argument('--n-clusters', type=int, default=2,
                         help='number of clusters in the latent space')
@@ -158,7 +157,7 @@ if __name__ == '__main__':
 
         elif args.dir == "synthetic":
             n_feat = 45
-            X, y = create_imbalanced_data_clusters(n_clusters=2, n_features = n_feat, inner_class_sep=0.4, seed=0)
+            X, y = create_imbalanced_data_clusters(n_samples=10000, n_clusters=2, n_features = n_feat, inner_class_sep=0.4, seed=0)
             X = pd.DataFrame(X)
             y = pd.DataFrame(y)
             args.input_dim = n_feat
@@ -220,9 +219,10 @@ if __name__ == '__main__':
     figure = plt.figure()
     fig, (ax1, ax2) = plt.subplots(1, 2)
     fig.suptitle('Normal vs CAC Embeddings')
-    ax1.scatter(X4[:,0], X4[:,1], color=c_train);
-    ax2.scatter(X2[:,0], X2[:,1], color=c_train); plt.show()
-    figure.savefig("normal_vs_cac.png", dpi=figure.dpi)
+    ax1.scatter(X4[:,0], X4[:,1], color=c_train)
+    ax2.scatter(X2[:,0], X2[:,1], color=c_train)
+    plt.savefig("normal_vs_cac.png", dpi=figure.dpi)
+    # plt.show()
 
     # Testing
     out = model.autoencoder(torch.FloatTensor(np.array(X_test)).to(args.device), latent=True)
@@ -234,6 +234,7 @@ if __name__ == '__main__':
     figure = plt.figure()
     fig, (ax1, ax2) = plt.subplots(1, 2)
     fig.suptitle('CAC Training vs Testing Embeddings')
-    ax1.scatter(X2[:,0], X2[:,1], color=c_train);
-    ax2.scatter(X_t[:,0], X_t[:,1], color=c_test); plt.show()
-    figure.savefig("train_vs_test.png", dpi=figure.dpi)
+    ax1.scatter(X2[:,0], X2[:,1], color=c_train)
+    ax2.scatter(X_t[:,0], X_t[:,1], color=c_test)
+    plt.savefig("train_vs_test.png", dpi=figure.dpi)
+    # plt.show()

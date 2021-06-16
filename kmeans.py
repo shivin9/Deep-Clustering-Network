@@ -20,6 +20,10 @@ class batch_KMeans(object):
         self.clusters = np.zeros((self.n_clusters, self.latent_dim))
         self.count = 100 * np.ones((self.n_clusters))  # serve as learning rate
         self.n_jobs = args.n_jobs
+        self.positive_centers = np.zeros((self.n_clusters, self.latent_dim))
+        self.negative_centers = np.zeros((self.n_clusters, self.latent_dim))
+        self.cluster_stats = np.zeros((self.n_clusters,2))
+
     
     def _compute_dist(self, X):
         dis_mat = Parallel(n_jobs=self.n_jobs)(
@@ -29,12 +33,29 @@ class batch_KMeans(object):
         
         return dis_mat
     
-    def init_cluster(self, X, indices=None):
+    def init_cluster(self, X, y=None, indices=None):
         """ Generate initial clusters using sklearn.Kmeans """
         model = KMeans(n_clusters=self.n_clusters,
                        n_init=20)
         model.fit(X)
         self.clusters = model.cluster_centers_  # copy clusters
+        labels = model.labels_
+
+        for j in range(self.n_clusters):
+            pts_index = np.where(labels == j)[0]
+            cluster_pts = X[pts_index]        
+            n_class_index = np.where(y[pts_index] == 0)[0]
+            p_class_index = np.where(y[pts_index] == 1)[0]
+
+            self.cluster_stats[j][0] = len(p_class_index)
+            self.cluster_stats[j][1] = len(n_class_index)
+
+            n_class = cluster_pts[n_class_index]
+            p_class = cluster_pts[p_class_index]
+
+            self.negative_centers[j,:] = n_class.mean(axis=0)
+            self.positive_centers[j,:] = p_class.mean(axis=0)
+
     
     def update_cluster(self, X, cluster_idx):
         """ Update clusters in Kmeans on a batch of data """
@@ -46,8 +67,24 @@ class batch_KMeans(object):
                                eta * X[i])
             self.clusters[cluster_idx] = updated_cluster
     
-    def update_assign(self, X):
+    def update_assign(self, X, y):
         """ Assign samples in `X` to clusters """
         dis_mat = self._compute_dist(X)
-        
-        return np.argmin(dis_mat, axis=1)
+        new_labels = np.argmin(dis_mat, axis=1)
+
+        for j in range(self.n_clusters):
+            pts_index = np.where(new_labels == j)[0]
+            cluster_pts = X[pts_index]        
+            n_class_index = np.where(y[pts_index] == 0)[0]
+            p_class_index = np.where(y[pts_index] == 1)[0]
+
+            self.cluster_stats[j][0] = len(p_class_index)
+            self.cluster_stats[j][1] = len(n_class_index)
+
+            n_class = cluster_pts[n_class_index]
+            p_class = cluster_pts[p_class_index]
+
+            self.negative_centers[j,:] = n_class.mean(axis=0)
+            self.positive_centers[j,:] = p_class.mean(axis=0)
+
+        return new_labels

@@ -53,7 +53,6 @@ def predict_clusters(X_test, all_centers) -> np.array:
     K = len(centers)
     dists = np.zeros(K)
     test_labels = np.zeros(X_test.shape[0])
-    label = 1
 
     for pt in range(X_test.shape[0]):
         for k in range(K):

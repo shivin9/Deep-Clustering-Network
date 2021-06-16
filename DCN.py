@@ -7,6 +7,8 @@ from kmeans import batch_KMeans
 from meanshift import batch_MeanShift
 from autoencoder import AutoEncoder
 from sklearn.metrics import davies_bouldin_score as dbs, adjusted_rand_score as ari
+from matplotlib import pyplot as plt
+color = ['grey', 'red', 'blue', 'pink', 'brown', 'black', 'magenta', 'purple', 'orange', 'cyan', 'olive']
 
 class DCN(nn.Module):
     
@@ -63,14 +65,14 @@ class DCN(nn.Module):
                                             diff_vec.view(-1, 1))
             dist_loss += 0.5 * self.beta * torch.squeeze(sample_dist_loss)
             
-            if self.args.clustering == "cac":
-                positive_clusters = torch.FloatTensor(self.clustering.positive_centers).to(self.device)
-                negative_clusters = torch.FloatTensor(self.clustering.negative_centers).to(self.device)
-                diff_vec = positive_clusters[cluster_id[i]] - negative_clusters[cluster_id[i]]
-                sample_sep_loss = torch.matmul(diff_vec.view(1, -1),
-                                                diff_vec.view(-1, 1))
-
-                dist_loss -= self.args.alpha * torch.squeeze(sample_sep_loss)
+            # if self.args.clustering == "cac":
+            positive_clusters = torch.FloatTensor(self.clustering.positive_centers).to(self.device)
+            negative_clusters = torch.FloatTensor(self.clustering.negative_centers).to(self.device)
+            diff_vec = positive_clusters[cluster_id[i]] - negative_clusters[cluster_id[i]]
+            sample_sep_loss = torch.matmul(diff_vec.view(1, -1),
+                                            diff_vec.view(-1, 1))
+            # print(self.args.alpha * torch.squeeze(sample_sep_loss))
+            dist_loss -= self.args.alpha * torch.squeeze(sample_sep_loss)
         
         return (rec_loss + dist_loss, 
                 rec_loss.detach().cpu().numpy(),
@@ -139,10 +141,20 @@ class DCN(nn.Module):
 
             if self.args.clustering == "cac":
                 cluster_id = self.clustering.cluster(latent_X, y, self.args.alpha)
+                c_clusters = [color[int(cluster_id[i])] for i in range(len(cluster_id))]
+                c_labels = [color[int(y[i])] for i in range(len(cluster_id))]
+                # plt.scatter(latent_X[:,0], latent_X[:,1], color=c_train); plt.show()
+
+                fig, (ax1, ax2) = plt.subplots(1, 2)
+                fig.suptitle('Clusters vs Labels')
+                ax1.scatter(latent_X[:,0], latent_X[:,1], color=c_clusters)
+                ax2.scatter(latent_X[:,0], latent_X[:,1], color=c_labels)
+                # plt.savefig("normal_vs_cac.png", dpi=figure.dpi)
+                plt.show()
 
             else:
                 # [Step-1] Update the assignment results
-                cluster_id = self.clustering.update_assign(latent_X)
+                cluster_id = self.clustering.update_assign(latent_X, y)
 
                 # [Step-2] Update cluster centers in batch Clustering
                 elem_count = np.bincount(cluster_id,
@@ -154,12 +166,22 @@ class DCN(nn.Module):
                         continue
                     # updating the cluster center
                     self.clustering.update_cluster(latent_X[cluster_id == k], k)
+
+                c_clusters = [color[int(cluster_id[i])] for i in range(len(cluster_id))]
+                c_labels = [color[int(y[i])] for i in range(len(cluster_id))]
+
+                fig, (ax1, ax2) = plt.subplots(1, 2)
+                fig.suptitle('Clusters vs Labels')
+                ax1.scatter(latent_X[:,0], latent_X[:,1], color=c_clusters)
+                ax2.scatter(latent_X[:,0], latent_X[:,1], color=c_labels)
+                # plt.savefig("normal_vs_cac.png", dpi=figure.dpi)
+                plt.show()
             
             # [Step-3] Update the network parameters
             loss, rec_loss, dist_loss = self._loss(data, cluster_id)
-            print(loss)
+            # print(loss)
             # print(dbs(data, cluster_id))
-            print("ARI: ", ari(cluster_id, y))
+            # print("ARI: ", ari(cluster_id, y))
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()

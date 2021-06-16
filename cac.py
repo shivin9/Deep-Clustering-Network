@@ -81,9 +81,10 @@ def update(X, y, cluster_stats, labels, centers, positive_centers, negative_cent
                                                 negative_centers[cluster_id])
 
         if ((lbls[iteration] == lbls[iteration-1]).all()) and iteration > 0:
-            print("converged at itr: ", iteration)
+            # print("converged at itr: ", iteration)
             break
-    print("ARI(KM, CAC) = ", ari(lbls[0], lbls[-1]))
+
+    # print("ARI(KM, CAC) = ", ari(lbls[0], lbls[-1]))
 
     # print(errors, np.sum(errors, axis=1))
     return cluster_stats, labels, centers, positive_centers, negative_centers
