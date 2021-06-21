@@ -12,7 +12,6 @@ def _parallel_compute_distance(X, cluster):
 
 
 class batch_KMeans(object):
-    
     def __init__(self, args):
         self.args = args
         self.latent_dim = args.latent_dim
@@ -32,7 +31,8 @@ class batch_KMeans(object):
         dis_mat = np.hstack(dis_mat)
         
         return dis_mat
-    
+
+
     def init_cluster(self, X, y=None, indices=None):
         """ Generate initial clusters using sklearn.Kmeans """
         model = KMeans(n_clusters=self.n_clusters,
@@ -41,22 +41,7 @@ class batch_KMeans(object):
         self.clusters = model.cluster_centers_  # copy clusters
         labels = model.labels_
 
-        for j in range(self.n_clusters):
-            pts_index = np.where(labels == j)[0]
-            cluster_pts = X[pts_index]        
-            n_class_index = np.where(y[pts_index] == 0)[0]
-            p_class_index = np.where(y[pts_index] == 1)[0]
 
-            self.cluster_stats[j][0] = len(p_class_index)
-            self.cluster_stats[j][1] = len(n_class_index)
-
-            n_class = cluster_pts[n_class_index]
-            p_class = cluster_pts[p_class_index]
-
-            self.negative_centers[j,:] = n_class.mean(axis=0)
-            self.positive_centers[j,:] = p_class.mean(axis=0)
-
-    
     def update_cluster(self, X, cluster_idx):
         """ Update clusters in Kmeans on a batch of data """
         n_samples = X.shape[0]
@@ -67,24 +52,9 @@ class batch_KMeans(object):
                                eta * X[i])
             self.clusters[cluster_idx] = updated_cluster
     
-    def update_assign(self, X, y):
+
+    def update_assign(self, X, y=None):
         """ Assign samples in `X` to clusters """
         dis_mat = self._compute_dist(X)
         new_labels = np.argmin(dis_mat, axis=1)
-
-        for j in range(self.n_clusters):
-            pts_index = np.where(new_labels == j)[0]
-            cluster_pts = X[pts_index]        
-            n_class_index = np.where(y[pts_index] == 0)[0]
-            p_class_index = np.where(y[pts_index] == 1)[0]
-
-            self.cluster_stats[j][0] = len(p_class_index)
-            self.cluster_stats[j][1] = len(n_class_index)
-
-            n_class = cluster_pts[n_class_index]
-            p_class = cluster_pts[p_class_index]
-
-            self.negative_centers[j,:] = n_class.mean(axis=0)
-            self.positive_centers[j,:] = p_class.mean(axis=0)
-
         return new_labels

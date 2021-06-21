@@ -10,7 +10,6 @@ from sklearn import model_selection, metrics
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from matplotlib import pyplot as plt
-import seaborn as sns
 from tqdm import tqdm
 from sklearn.cluster import KMeans
 from typing import Tuple
@@ -49,7 +48,7 @@ def predict_clusters(X_test, all_centers) -> np.array:
         centers, p_centers, n_centers = all_centers
     else:
         centers = all_centers
-
+    print(centers)    
     K = len(centers)
     dists = np.zeros(K)
     test_labels = np.zeros(X_test.shape[0])
@@ -89,7 +88,7 @@ def compute_euclidean_distance(point, centroid):
     return np.sum((point - centroid)**2)
 
 
-def calculate_gamma_old(pt, label, mu, mup, mun, cluster_stats, alpha=2):
+def calculate_gamma_old(pt, label, mu, mup, mun, cluster_stats, beta=1, alpha=2):
     p, n = cluster_stats[0], cluster_stats[1]
     if label == 0:
         mun_new = (n/(n-1))*mun - (1/(n-1))*pt
@@ -107,20 +106,22 @@ def calculate_gamma_old(pt, label, mu, mup, mun, cluster_stats, alpha=2):
     new_lin_sep = np.sum(np.square(mun_new - mup_new))
     lin_sep = np.sum(np.square(mun - mup))
     mu_sep = np.sum(np.square(mu - mu_new))
-    gamma_p = -np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + (p+n) * alpha*lin_sep - (p+n-1)*alpha*new_lin_sep
+    gamma_p = -beta*np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + (p+n) * alpha*lin_sep - (p+n-1)*alpha*new_lin_sep
     # gamma_p = -np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + alpha*lin_sep - alpha*new_lin_sep
     return gamma_p
 
 
-def calculate_gamma_new(pt, label, mu, mup, mun, cluster_stats, alpha=2):
+def calculate_gamma_new(pt, label, mu, mup, mun, cluster_stats, beta=1, alpha=2):
     p, n = cluster_stats[0], cluster_stats[1]
     if label == 0:
+        assert(n != -1)
         mun_new = (n/(n+1))*mun + (1/(n+1))*pt
         mup_new = mup
         n_new = n+1
         p_new = p
 
     else:
+        assert(p != -1)
         mup_new = (p/(p+1))*mup + (1/(p+1))*pt
         mun_new = mun
         p_new = p+1
@@ -131,7 +132,7 @@ def calculate_gamma_new(pt, label, mu, mup, mun, cluster_stats, alpha=2):
     lin_sep = np.sum(np.square(mun - mup))
     mu_sep = np.sum(np.square(mu - mu_new))
 
-    gamma_j = np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + (p+n) * alpha*lin_sep - (p+n+1)*alpha*new_lin_sep
+    gamma_j = beta*np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + (p+n) * alpha*lin_sep - (p+n+1)*alpha*new_lin_sep
     # gamma_j = np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + alpha*lin_sep - alpha*new_lin_sep
     return gamma_j
 
@@ -202,18 +203,18 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
                     if cluster_id != old_cluster:
                         distance[cluster_id] = calculate_gamma_new(pt, pt_label,\
                                                 centers[cluster_id], positive_centers[cluster_id],\
-                                                negative_centers[cluster_id], cluster_stats[cluster_id], alpha)
+                                                negative_centers[cluster_id], cluster_stats[cluster_id], beta, alpha)
                     else:
                         distance[cluster_id] = np.infty
 
                 old_gamma = calculate_gamma_old(pt, pt_label,\
                                                 centers[old_cluster], positive_centers[old_cluster],\
-                                                negative_centers[old_cluster], cluster_stats[old_cluster], alpha)
+                                                negative_centers[old_cluster], cluster_stats[old_cluster], beta, alpha)
                 # new update condition
                 new_cluster = min(distance, key=distance.get)
                 new_gamma = distance[new_cluster]
 
-                if beta < old_gamma + new_gamma < 0:
+                if old_gamma + new_gamma < 0:
                     # Remove point from old cluster
                     p, n = cluster_stats[old_cluster] # Old cluster statistics
                     t = p + n
@@ -245,7 +246,7 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
         for idp in range(N):
             pt = data_points[idp]
             cluster_id = labels[idp]
-            errors[iteration][cluster_id] += compute_euclidean_distance(pt, centers[cluster_id])-alpha*compute_euclidean_distance(positive_centers[cluster_id],\
+            errors[iteration][cluster_id] += beta*compute_euclidean_distance(pt, centers[cluster_id])-alpha*compute_euclidean_distance(positive_centers[cluster_id],\
                                                 negative_centers[cluster_id])
 
         # Store best clustering

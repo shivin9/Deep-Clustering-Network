@@ -17,23 +17,33 @@ from sklearn.datasets import make_blobs
 color = ['grey', 'red', 'blue', 'pink', 'brown', 'black', 'magenta', 'purple', 'orange', 'cyan', 'olive']
 
 def evaluate(model, test_loader):
+    X_test = np.empty(shape=model.args.latent_dim)
     y_test = []
     y_pred = []
+    y_classifier_pred = []
+    y_classifier_pred_proba = []
+
     for data, target in test_loader:
         batch_size = data.size()[0]
         data = data.view(batch_size, -1).to(model.device)
         latent_X = model.autoencoder(data, latent=True)
         latent_X = latent_X.detach().cpu().numpy()
+        X_test = np.vstack([X_test, latent_X])
         y_test.append(target.view(-1, 1).numpy())
         y_pred.append(model.clustering.update_assign(latent_X, target).reshape(-1, 1))
     
+    for j in range(model.args.n_clusters):
+        cluster_index = np.where(y_pred == j)[0]
+        X_cluster = X_test[cluster_index]
+        y_cluster = y_test[cluster_index]
+        y_classifier_pred.append(model.classifier[j].predict(X_cluster))
+
     y_test = np.vstack(y_test).reshape(-1)
     y_pred = np.vstack(y_pred).reshape(-1)
     return (normalized_mutual_info_score(y_test, y_pred),
             adjusted_rand_score(y_test, y_pred))
 
 def solver(args, model, train_loader, test_loader):
-    
     rec_loss_list = model.pretrain(train_loader, epoch=args.pre_epoch)
     nmi_list = []
     ari_list = []
@@ -93,7 +103,6 @@ def paper_synthetic(n_pts=1000, centers=4):
 
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser(description='Deep Clustering Network')
 
     # Dataset parameters

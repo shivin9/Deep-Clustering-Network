@@ -6,12 +6,19 @@ from cac import batch_cac
 from kmeans import batch_KMeans
 from meanshift import batch_MeanShift
 from autoencoder import AutoEncoder
+from sklearn.svm import SVC, LinearSVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.metrics import davies_bouldin_score as dbs, adjusted_rand_score as ari
+from sklearn.linear_model import LogisticRegression, Perceptron, SGDClassifier, RidgeClassifier
 from matplotlib import pyplot as plt
+
 color = ['grey', 'red', 'blue', 'pink', 'brown', 'black', 'magenta', 'purple', 'orange', 'cyan', 'olive']
 
 class DCN(nn.Module):
-    
     def __init__(self, args):
         super(DCN, self).__init__()
         self.args = args
@@ -37,6 +44,8 @@ class DCN(nn.Module):
             self.clustering = batch_MeanShift(args)
         elif args.clustering == "cac":
             self.clustering = batch_cac(args)
+            self.CLASSIFIER = args.classifier
+            self.classifiers = []
         else:
             raise RuntimeError('Error: no clustering chosen')
             
@@ -46,6 +55,37 @@ class DCN(nn.Module):
                                           lr=args.lr,
                                           weight_decay=args.wd)
     
+    def get_classifier(self, classifier):
+        if classifier == "LR":
+            model = LogisticRegression(random_state=0, max_iter=1000)
+        elif classifier == "RF":
+            model = RandomForestClassifier(n_estimators=10)
+        elif classifier == "SVM":
+            # model = SVC(kernel="linear", probability=True)
+            model = LinearSVC(max_iter=5000)
+            model.predict_proba = lambda X: np.array([model.decision_function(X), model.decision_function(X)]).transpose()
+        elif classifier == "Perceptron":
+            model = Perceptron()
+            model.predict_proba = lambda X: np.array([model.decision_function(X), model.decision_function(X)]).transpose()
+        elif classifier == "ADB":
+            model = AdaBoostClassifier(n_estimators = 100)
+        elif classifier == "DT":
+            model = DecisionTreeClassifier()
+        elif classifier == "LDA":
+            model = LDA()
+        elif classifier == "NB":
+            model = MultinomialNB()
+        elif classifier == "SGD":
+            model = SGDClassifier(loss='log')
+        elif classifier == "Ridge":
+            model = RidgeClassifier()
+            model.predict_proba = lambda X: np.array([model.decision_function(X), model.decision_function(X)]).transpose()
+        elif classifier == "KNN":
+            model = KNeighborsClassifier(n_neighbors=5)
+        else:
+            model = LogisticRegression(class_weight='balanced', max_iter=1000)
+        return model
+
     """ Compute the Equation (5) in the original paper on a data batch """
     def _loss(self, X, cluster_id):
         batch_size = X.size()[0]
@@ -111,7 +151,12 @@ class DCN(nn.Module):
         
         if verbose:
             print('========== End pretraining ==========\n')
-        
+
+        self.pre_cluster(train_loader)
+                
+        return rec_loss_list
+    
+    def pre_cluster(self, train_loader):
         # Initialize clusters in self.clustering after pre-training
         batch_X = []
         batch_y = []
@@ -123,12 +168,11 @@ class DCN(nn.Module):
             batch_y.append(y)
 
         batch_X = np.vstack(batch_X)
-        batch_y = np.hstack(batch_y)
+        batch_y = np.vstack(batch_y)
 
         self.clustering.init_cluster(batch_X, batch_y)
-        
-        return rec_loss_list
-    
+        return None
+
     def fit(self, epoch, train_loader, verbose=True):
         for batch_idx, (data, y) in enumerate(train_loader):
             batch_size = data.size()[0]
@@ -140,7 +184,7 @@ class DCN(nn.Module):
                 latent_X = latent_X.cpu().numpy()
 
             if self.args.clustering == "cac":
-                cluster_id = self.clustering.cluster(latent_X, y, self.args.alpha)
+                cluster_id = self.clustering.cluster(latent_X, y, self.args.beta, self.args.alpha)
                 c_clusters = [color[int(cluster_id[i])] for i in range(len(cluster_id))]
                 c_labels = [color[int(y[i])] for i in range(len(cluster_id))]
                 # plt.scatter(latent_X[:,0], latent_X[:,1], color=c_train); plt.show()
@@ -179,9 +223,6 @@ class DCN(nn.Module):
             
             # [Step-3] Update the network parameters
             loss, rec_loss, dist_loss = self._loss(data, cluster_id)
-            # print(loss)
-            # print(dbs(data, cluster_id))
-            # print("ARI: ", ari(cluster_id, y))
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
