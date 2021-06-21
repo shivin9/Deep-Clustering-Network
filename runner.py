@@ -3,8 +3,7 @@ import argparse
 import numpy as np
 from DCN import DCN
 from torchvision import datasets, transforms
-from sklearn.metrics import adjusted_rand_score
-from sklearn.metrics import normalized_mutual_info_score
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, f1_score, roc_auc_score
 from torch.utils.data import Subset
 import pandas as pd
 from sklearn.datasets import make_classification
@@ -32,16 +31,32 @@ def evaluate(model, test_loader):
         y_test.append(target.view(-1, 1).numpy())
         y_pred.append(model.clustering.update_assign(latent_X, target).reshape(-1, 1))
     
+    y_test = np.vstack(y_test).reshape(-1)
+    y_pred = np.vstack(y_pred).reshape(-1)
+    nmi, ari = normalized_mutual_info_score(y_test, y_pred), adjusted_rand_score(y_test, y_pred)
+
+    base_f1 = f1_score(y_test, model.base_classifier[-1].predict(X_test))
+    base_auc = roc_auc_score(y_test, model.base_classifier[-1].predict_proba(X_test)[:,1])
+    
+    X_cluster_test = []
+    y_cluster_test = []
+
     for j in range(model.args.n_clusters):
         cluster_index = np.where(y_pred == j)[0]
         X_cluster = X_test[cluster_index]
         y_cluster = y_test[cluster_index]
-        y_classifier_pred.append(model.classifier[j].predict(X_cluster))
 
-    y_test = np.vstack(y_test).reshape(-1)
-    y_pred = np.vstack(y_pred).reshape(-1)
-    return (normalized_mutual_info_score(y_test, y_pred),
-            adjusted_rand_score(y_test, y_pred))
+        X_cluster_test.append(X_cluster)
+        y_cluster_test.append(y_cluster)
+
+        # Select the cluster classifiers appearing in the latest iteration
+        y_classifier_pred.append(model.cluster_classifiers[-1][j].predict(X_cluster))
+        y_classifier_pred_proba.append(model.cluster_classifiers[-1][j].predict_proba(X_cluster)[:,1])
+
+    cac_f1 = f1_score(y_cluster_test, y_classifier_pred)
+    cac_auc = roc_auc_score(y_test, y_classifier_pred_proba)
+
+    return (nmi, ari, base_f1, base_auc, cac_f1, cac_auc)
 
 def solver(args, model, train_loader, test_loader):
     rec_loss_list = model.pretrain(train_loader, epoch=args.pre_epoch)
@@ -49,16 +64,53 @@ def solver(args, model, train_loader, test_loader):
     ari_list = []
 
     for e in range(args.epoch):
+        # Show training set
+        if e%1 == 0:
+            out = model.autoencoder(torch.FloatTensor(np.array(X_train)).to(args.device), latent=True)
+            cluster_id = model.clustering.update_assign(out.cpu().detach().numpy())
+            X2 = reducer.fit_transform(out.cpu().detach().numpy())
+
+    #         X_centers = reducer.transform(model.clustering.clusters)
+
+            c_clusters = [color[int(cluster_id[i])] for i in range(len(cluster_id))]
+            c_labels = [color[int(y_train[i])] for i in range(len(cluster_id))]
+            # plt.scatter(latent_X[:,0], latent_X[:,1], color=c_train); plt.show()
+
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            fig.suptitle('Clusters vs Labels')
+            ax1.scatter(X2[:,0], X2[:,1], color=c_clusters)
+    #         ax1.plot(X_centers[0], marker='x', markersize=3, color="green")
+    #         ax1.plot(X_centers[1], marker='x', markersize=3, color="green")
+
+            ax2.scatter(X2[:,0], X2[:,1], color=c_labels)
+            plt.show()
+
+            # Print testset
+            out = model.autoencoder(torch.FloatTensor(np.array(X_test)).to(args.device), latent=True)
+            test_cluster_id = model.clustering.update_assign(out.cpu().detach().numpy())
+            X_t = reducer.transform(out.cpu().detach().numpy())
+
+            c_clusters = [color[int(test_cluster_id[i])] for i in range(len(test_cluster_id))]
+            c_test = [color[int(y_test[i])] for i in range(len(y_test))]
+
+            figure = plt.figure()
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            fig.suptitle('CAC Testing Clusters vs Testing Embeddings')
+            ax1.scatter(X_t[:,0], X_t[:,1], color=c_clusters)
+            ax2.scatter(X_t[:,0], X_t[:,1], color=c_test)
+            plt.show()
+
         model.train()
         model.fit(e, train_loader)
         
         model.eval()
-        NMI, ARI = evaluate(model, test_loader)  # evaluation on the test_loader
+        NMI, ARI, base_f1, base_auc, cac_f1, cac_auc = evaluate(model, test_loader)  # evaluation on the test_loader
         nmi_list.append(NMI)
         ari_list.append(ARI)
         
-        print('Epoch: {:02d} | NMI: {:.3f} | ARI: {:.3f}'.format(
-            e+1, NMI, ARI))
+        print('Epoch: {:02d} | NMI: {:.3f} | ARI: {:.3f} | Base_F1: {:.3f} | Base_AUC: {:.3f} | CAC_F1: {:.3f} | CAC_F1: {:.3f}'.format(
+            e+1, NMI, ARI, base_f1, base_auc, cac_f1, cac_auc))
+        print("\n")
 
     return rec_loss_list, nmi_list, ari_list
 
