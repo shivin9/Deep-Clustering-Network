@@ -16,9 +16,65 @@ class batch_cac(object):
         self.clusters = np.zeros((self.n_clusters, self.latent_dim))
         self.positive_centers = np.zeros((self.n_clusters, self.latent_dim))
         self.negative_centers = np.zeros((self.n_clusters, self.latent_dim))
+        self.positive_sse = np.zeros(self.n_clusters)
+        self.negative_sse = np.zeros(self.n_clusters)
         self.count = 100 * np.ones((self.n_clusters))  # serve as learning rate
         self.n_jobs = args.n_jobs
 
+
+    def calculate_gamma_old(self, pt, label, mu, mup, mun, p_sse, n_sse, cluster_stats, beta=1, alpha=2):
+        p, n = cluster_stats[0], cluster_stats[1]
+        if label == 0:
+            mun_new = (n/(n-1))*mun - (1/(n-1))*pt
+            mup_new = mup
+            new_n_sse = (n/(n-1))*n_sse - (1/(n-1))*np.linalg.norm(pt-mun_new)*np.linalg.norm(pt-mun)
+            new_p_sse = p_sse
+            n_new = n-1
+            p_new = p
+
+        else:
+            mup_new = (p/(p-1))*mup - (1/(p-1))*pt
+            mun_new = mun
+            new_p_sse = (p/(p-1))*p_sse - (1/(p-1))*np.linalg.norm(pt-mup_new)*np.linalg.norm(pt-mup)
+            new_n_sse = n_sse
+            p_new = p-1
+            n_new = n
+
+        mu_new = (p_new*mup_new + n_new*mun_new)/(p_new + n_new)
+        new_lin_sep = np.sum(np.square(mun_new - mup_new))/(new_n_sse + new_p_sse)
+        lin_sep = np.sum(np.square(mun - mup))/(n_sse + p_sse)
+        mu_sep = np.sum(np.square(mu - mu_new))
+        gamma_p = -beta*np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + (p+n) * alpha*lin_sep - (p+n-1)*alpha*new_lin_sep
+        # gamma_p = -np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + alpha*lin_sep - alpha*new_lin_sep
+        return gamma_p
+
+
+    def calculate_gamma_new(self, pt, label, mu, mup, mun, p_sse, n_sse, cluster_stats, beta=1, alpha=2):
+        p, n = cluster_stats[0], cluster_stats[1]
+        if label == 0:
+            mun_new = (n/(n+1))*mun + (1/(n+1))*pt
+            mup_new = mup
+            new_n_sse = (n/(n+1))*n_sse + (1/(n+1))*np.linalg.norm(pt-mun_new)*np.linalg.norm(pt-mun)
+            new_p_sse = p_sse
+            n_new = n+1
+            p_new = p
+
+        else:
+            mup_new = (p/(p+1))*mup + (1/(p+1))*pt
+            mun_new = mun
+            new_p_sse = (p/(p+1))*p_sse + (1/(p+1))*np.linalg.norm(pt-mup_new)*np.linalg.norm(pt-mup)
+            new_n_sse = n_sse
+            p_new = p+1
+            n_new = n
+
+        mu_new = (p_new*mup_new + n_new*mun_new)/(p_new + n_new)
+        new_lin_sep = np.sum(np.square(mun_new - mup_new))/(new_n_sse + new_p_sse)
+        lin_sep = np.sum(np.square(mun - mup))/(n_sse + p_sse)
+        mu_sep = np.sum(np.square(mu - mu_new))
+
+        gamma_j = beta*np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + (p+n) * alpha*lin_sep - (p+n+1)*alpha*new_lin_sep
+        # gamma_j = np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + alpha*lin_sep - alpha*new_lin_sep
+        return gamma_j
 
     def predict_clusters(self, X_test, centers) -> np.array:
         K = centers.shape[0]
@@ -51,89 +107,113 @@ class batch_cac(object):
 
             n_class_index = np.where(y[pts_index] == 0)[0]
             p_class_index = np.where(y[pts_index] == 1)[0]
-
-#             self.cluster_stats[j][0] = len(p_class_index)
-#             self.cluster_stats[j][1] = len(n_class_index)
+            self.cluster_stats[j][0] = len(p_class_index)
+            self.cluster_stats[j][1] = len(n_class_index)
+            n_class = cluster_pts[n_class_index]
+            p_class = cluster_pts[p_class_index]
+            self.negative_sse[j] = np.square(np.linalg.norm(n_class - self.negative_centers[j]))
+            self.positive_sse[j] = np.square(np.linalg.norm(p_class - self.positive_centers[j]))
 
         return None
 
 
-    def update(self, X, y, cluster_stats, labels, centers, positive_centers, negative_centers, k, beta, alpha):
+    def update(self, X, y, labels, beta, alpha):
         total_iterations = 100
+        k = self.n_clusters
         errors = np.zeros((total_iterations, k))
         lbls = []
         lbls.append(np.copy(labels))
 
         if len(np.unique(y)) == 1:
-            return cluster_stats, labels, centers, positive_centers, negative_centers
+            return cluster_stats, labels, self.clusters, self.positive_centers, self.negative_centers
 
-        for iteration in range(total_iterations):
-            N = len(X)
+        old_p, old_n = np.copy(self.positive_centers), np.copy(self.negative_centers)
+
+        for iteration in range(0, total_iterations):
+            # print(cluster_stats)
+            N = X.shape[0]
             cluster_label = []
             for index_point in range(N):
                 distance = {}
                 pt = X[index_point]
                 pt_label = y[index_point]
                 cluster_id = labels[index_point]
-                p, n = cluster_stats[cluster_id][0], cluster_stats[cluster_id][1]
+                p, n = self.cluster_stats[cluster_id][0], self.cluster_stats[cluster_id][1]
                 new_cluster = old_cluster = labels[index_point]
                 old_err = np.zeros(k)
-
                 # Ensure that degeneracy is not happening
-                if ((p > 1 and pt_label == 1) or (n > 1 and pt_label == 0)):
+                if ((p > 2 and pt_label == 1) or (n > 2 and pt_label == 0)):
                     for cluster_id in range(0, k):
                         if cluster_id != old_cluster:
-                            distance[cluster_id] = calculate_gamma_new(pt, pt_label, centers[cluster_id],\
-                                                    positive_centers[cluster_id], negative_centers[cluster_id],\
-                                                    cluster_stats[cluster_id], beta, alpha)
+                            distance[cluster_id] = self.calculate_gamma_new(pt, pt_label, self.clusters[cluster_id], self.positive_centers[cluster_id],\
+                                                    self.negative_centers[cluster_id], self.positive_sse[cluster_id], self.negative_sse[cluster_id], self.cluster_stats[cluster_id], beta, alpha)
                         else:
                             distance[cluster_id] = np.infty
 
-                    old_gamma = calculate_gamma_old(pt, pt_label, centers[old_cluster],\
-                                                    positive_centers[old_cluster], negative_centers[old_cluster],\
-                                                    cluster_stats[old_cluster], beta, alpha)
+                    old_gamma = self.calculate_gamma_old(pt, pt_label, self.clusters[old_cluster], self.positive_centers[old_cluster],\
+                                                    self.negative_centers[old_cluster], self.positive_sse[old_cluster], self.negative_sse[old_cluster], self.cluster_stats[old_cluster], beta, alpha)
                     # new update condition
                     new_cluster = min(distance, key=distance.get)
                     new_gamma = distance[new_cluster]
 
                     if old_gamma + new_gamma < 0:
                         # Remove point from old cluster
-                        p, n = cluster_stats[old_cluster] # Old cluster statistics
+                        p, n = self.cluster_stats[old_cluster] # Old cluster statistics
                         t = p + n
 
-                        centers[old_cluster] = (t/(t-1))*centers[old_cluster] - (1/(t-1))*pt
+                        self.clusters[old_cluster] = (t/(t-1))*self.clusters[old_cluster] - (1/(t-1))*pt
 
                         if pt_label == 0:
-                            negative_centers[old_cluster] = (n/(n-1))*negative_centers[old_cluster] - (1/(n-1)) * pt
-                            cluster_stats[old_cluster][1] -= 1
+                            new_mean = (n/(n-1))*self.negative_centers[old_cluster] - (1/(n-1)) * pt
+                            old_mean = self.negative_centers[old_cluster]
+                            self.negative_sse[old_cluster] = (n/(n-1))*self.negative_sse[old_cluster] - \
+                                    (1/(n-1))*np.linalg.norm(pt-new_mean)*np.linalg.norm(pt-old_mean)
+                            self.negative_centers[old_cluster] = new_mean
+                            self.cluster_stats[old_cluster][1] -= 1
 
                         else:
-                            positive_centers[old_cluster] = (p/(p-1))*positive_centers[old_cluster] - (1/(p-1)) * pt
-                            cluster_stats[old_cluster][0] -= 1
+                            new_mean = (p/(p-1))*self.positive_centers[old_cluster] - (1/(p-1)) * pt
+                            old_mean = self.positive_centers[old_cluster]
+                            self.positive_sse[old_cluster] = (p/(p-1))*self.positive_sse[old_cluster] - \
+                                    (1/(p-1)) * np.linalg.norm(pt-new_mean)*np.linalg.norm(pt-old_mean)
+                            self.positive_centers[old_cluster] = new_mean
+                            self.cluster_stats[old_cluster][0] -= 1
+
 
                         # Add point to new cluster
-                        p, n = cluster_stats[new_cluster] # New cluster statistics
+                        p, n = self.cluster_stats[new_cluster] # New cluster statistics
                         t = p + n
-                        centers[new_cluster] = (t/(t+1))*centers[new_cluster] + (1/(t+1))*pt
+                        self.clusters[new_cluster] = (t/(t+1))*self.clusters[new_cluster] + (1/(t+1))*pt
 
                         if pt_label == 0:
-                            negative_centers[new_cluster] = (n/(n+1))*negative_centers[new_cluster] + (1/(n+1)) * pt
-                            cluster_stats[new_cluster][1] += 1
+                            new_mean = (n/(n+1))*self.negative_centers[new_cluster] + (1/(n+1)) * pt
+                            old_mean = self.negative_centers[new_cluster]
+                            self.negative_sse[new_cluster] = (n/(n+1))*self.negative_sse[new_cluster] + \
+                                    (1/(n+1)) * np.linalg.norm(pt-new_mean) * np.linalg.norm(pt-old_mean)
+                            self.negative_centers[new_cluster] = new_mean
+                            self.cluster_stats[new_cluster][1] += 1
 
                         else:
-                            positive_centers[new_cluster] = (p/(p+1))*positive_centers[new_cluster] + (1/(p+1)) * pt
-                            cluster_stats[new_cluster][0] += 1
+                            new_mean = (p/(p+1))*self.positive_centers[new_cluster] + (1/(p+1)) * pt
+                            old_mean = self.positive_centers[new_cluster]
+                            self.positive_sse[new_cluster] = (p/(p+1))*self.positive_sse[new_cluster] + \
+                                    (1/(p+1)) * np.linalg.norm(pt-new_mean) * np.linalg.norm(pt-old_mean)
+                            self.positive_centers[new_cluster] = new_mean
+                            self.cluster_stats[new_cluster][0] += 1
+
                         labels[index_point] = new_cluster
-                        assert(cluster_stats[old_cluster][0] > 0)
-                        assert(cluster_stats[old_cluster][1] > 0)
+
 
             lbls.append(np.copy(labels))
 
             if ((lbls[iteration] == lbls[iteration-1]).all()) and iteration > 0:
-#                 print("converged at itr: ", iteration)
+                print("converged at itr: ", iteration)
                 break
 
-        return cluster_stats, labels, centers, positive_centers, negative_centers
+#         print("Mean of Delta Clusters")
+#         print(np.mean(old_p-positive_centers), np.mean(old_n - negative_centers))
+
+        return labels
 
     
     def cluster(self, X, y, beta, alpha):
@@ -144,11 +224,10 @@ class batch_cac(object):
         self.update_cluster_centers(X, y, cluster_labels)
 
         # update cluster centers
-        self.cluster_stats, new_labels, self.clusters, self.positive_centers, self.negative_centers = self.update(X, y, self.cluster_stats, cluster_labels,\
-             self.clusters, self.positive_centers, self.negative_centers, self.n_clusters, beta, alpha)
+        new_labels = self.update(X, y, cluster_labels, beta, alpha)
 
         return new_labels
-    
+
 
     def init_cluster(self, X, y, indices=None):
         """ Generate initial clusters using sklearn.Kmeans """
@@ -174,6 +253,9 @@ class batch_cac(object):
 
             self.negative_centers[j,:] = n_class.mean(axis=0)
             self.positive_centers[j,:] = p_class.mean(axis=0)
+
+            self.negative_sse[j] = np.square(np.linalg.norm(n_class - self.negative_centers[j]))
+            self.positive_sse[j] = np.square(np.linalg.norm(p_class - self.positive_centers[j]))
 
         # self.clusters = np.random.rand(self.n_clusters, self.latent_dim)  # copy clusters
 

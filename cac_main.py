@@ -26,6 +26,7 @@ def sensitivity(params):
     return (params[3]/(params[3]+params[2]))
 
 scale = StandardScaler()
+
 ##############################################################################
 ##############################################################################
 ##############################################################################
@@ -88,48 +89,55 @@ def compute_euclidean_distance(point, centroid):
     return np.sum((point - centroid)**2)
 
 
-def calculate_gamma_old(pt, label, mu, mup, mun, cluster_stats, beta=1, alpha=2):
+def calculate_gamma_old(pt, label, mu, mup, mun, p_sse, n_sse, cluster_stats, beta=1, alpha=2):
     p, n = cluster_stats[0], cluster_stats[1]
     if label == 0:
         mun_new = (n/(n-1))*mun - (1/(n-1))*pt
         mup_new = mup
+        new_n_sse = (n/(n-1))*n_sse - (1/(n-1)) * (pt-mun_new)*(pt-mun)
+        new_p_sse = p_sse
         n_new = n-1
         p_new = p
+
     else:
         mup_new = (p/(p-1))*mup - (1/(p-1))*pt
         mun_new = mun
+        new_p_sse = (p/(p-1))*p_sse - (1/(p-1)) * (pt-mup_new)*(pt-mup)
+        new_n_sse = n_sse
         p_new = p-1
         n_new = n
 
     mu_new = (p_new*mup_new + n_new*mun_new)/(p_new + n_new)
 
-    new_lin_sep = np.sum(np.square(mun_new - mup_new))
-    lin_sep = np.sum(np.square(mun - mup))
+    new_lin_sep = np.sum(np.square(mun_new - mup_new))/(new_n_sse + new_p_sse)
+    lin_sep = np.sum(np.square(mun - mup))/(n_sse + p_sse)
     mu_sep = np.sum(np.square(mu - mu_new))
     gamma_p = -beta*np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + (p+n) * alpha*lin_sep - (p+n-1)*alpha*new_lin_sep
     # gamma_p = -np.sum(np.square(mu-pt)) - (p+n-1) * mu_sep + alpha*lin_sep - alpha*new_lin_sep
     return gamma_p
 
 
-def calculate_gamma_new(pt, label, mu, mup, mun, cluster_stats, beta=1, alpha=2):
+def calculate_gamma_new(pt, label, mu, mup, mun, p_sse, n_sse, cluster_stats, beta=1, alpha=2):
     p, n = cluster_stats[0], cluster_stats[1]
     if label == 0:
-        assert(n != -1)
         mun_new = (n/(n+1))*mun + (1/(n+1))*pt
         mup_new = mup
+        new_n_sse = (n/(n+1))*n_sse + (1/(n+1)) * (pt-mun_new)*(pt-mun)
+        new_p_sse = p_sse
         n_new = n+1
         p_new = p
 
     else:
-        assert(p != -1)
         mup_new = (p/(p+1))*mup + (1/(p+1))*pt
         mun_new = mun
+        new_p_sse = (p/(p+1))*p_sse + (1/(p+1)) * (pt-mup_new)*(pt-mup)
+        new_n_sse = n_sse
         p_new = p+1
         n_new = n
 
     mu_new = (p_new*mup_new + n_new*mun_new)/(p_new + n_new)
-    new_lin_sep = np.sum(np.square(mun_new - mup_new))
-    lin_sep = np.sum(np.square(mun - mup))
+    new_lin_sep = np.sum(np.square(mun_new - mup_new))/(new_n_sse + new_p_sse)
+    lin_sep = np.sum(np.square(mun - mup))/(n_sse + p_sse)
     mu_sep = np.sum(np.square(mu - mu_new))
 
     gamma_j = beta*np.sum(np.square(mu_new-pt)) + (p+n)*mu_sep + (p+n) * alpha*lin_sep - (p+n+1)*alpha*new_lin_sep
@@ -155,6 +163,8 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
     cluster_stats = np.zeros((k,2))
     seps = []
     loss = []
+    positive_sse = np.zeros(k)
+    negative_sse = np.zeros(k)
 
     # Initializing the mu arrays
     for j in range(k):
@@ -172,6 +182,9 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
 
         negative_centers[j,:] = n_class.mean(axis=0)
         positive_centers[j,:] = p_class.mean(axis=0)
+
+        negative_sse[j] = np.square(np.linalg.norm(n_class - negative_centers[j]))
+        positive_sse[j] = np.square(np.linalg.norm(p_class - positive_centers[j]))
 
     # Initial performance
     f1, roc, m, l = get_new_accuracy(data_points, labels, y, classifier)
@@ -198,18 +211,18 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
             new_cluster = old_cluster = labels[index_point]
             old_err = np.zeros(k)
             # Ensure that degeneracy is not happening
-            if ~((p == 1 and pt_label == 1) or (n == 1 and pt_label == 0)):
+            if ((p > 1 and pt_label == 1) or (n > 1 and pt_label == 0)):
                 for cluster_id in range(0, k):
                     if cluster_id != old_cluster:
                         distance[cluster_id] = calculate_gamma_new(pt, pt_label,\
                                                 centers[cluster_id], positive_centers[cluster_id],\
-                                                negative_centers[cluster_id], cluster_stats[cluster_id], beta, alpha)
+                                                negative_centers[cluster_id], p_sse, n_sse, cluster_stats[cluster_id], beta, alpha)
                     else:
                         distance[cluster_id] = np.infty
 
                 old_gamma = calculate_gamma_old(pt, pt_label,\
                                                 centers[old_cluster], positive_centers[old_cluster],\
-                                                negative_centers[old_cluster], cluster_stats[old_cluster], beta, alpha)
+                                                negative_centers[old_cluster], p_sse, n_sse, cluster_stats[old_cluster], beta, alpha)
                 # new update condition
                 new_cluster = min(distance, key=distance.get)
                 new_gamma = distance[new_cluster]
@@ -222,12 +235,19 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
                     centers[old_cluster] = (t/(t-1))*centers[old_cluster] - (1/(t-1))*pt
 
                     if pt_label == 0:
-                        negative_centers[old_cluster] = (n/(n-1))*negative_centers[old_cluster] - (1/(n-1)) * pt
+                        new_mean = (n/(n-1))*negative_centers[old_cluster] - (1/(n-1)) * pt
+                        old_mean = negative_centers[old_cluster]
+                        negative_sse[old_cluster] = (n/(n-1))*negative_sse[old_cluster] - (1/(n-1)) * (pt-new_mean)*(pt-old_mean)
+                        negative_centers[old_cluster] = new_mean
                         cluster_stats[old_cluster][1] -= 1
 
                     else:
-                        positive_centers[old_cluster] = (p/(p-1))*positive_centers[old_cluster] - (1/(p-1)) * pt
+                        new_mean = (p/(p-1))*positive_centers[old_cluster] - (1/(p-1)) * pt
+                        old_mean = positive_centers[old_cluster]
+                        positive_sse[old_cluster] = (p/(p-1))*positive_sse[old_cluster] - (1/(p-1)) * (pt-new_mean)*(pt-old_mean)
+                        positive_centers[old_cluster] = new_mean
                         cluster_stats[old_cluster][0] -= 1
+
 
                     # Add point to new cluster
                     p, n = cluster_stats[new_cluster] # New cluster statistics
@@ -235,19 +255,26 @@ def cac(data_points, cluster_labels, total_iteration, y, alpha, beta, classifier
                     centers[new_cluster] = (t/(t+1))*centers[new_cluster] + (1/(t+1))*pt
 
                     if pt_label == 0:
-                        negative_centers[new_cluster] = (n/(n+1))*negative_centers[new_cluster] + (1/(n+1)) * pt
+                        new_mean = (n/(n+1))*negative_centers[new_cluster] + (1/(n+1)) * pt
+                        old_mean = negative_centers[new_cluster]
+                        negative_sse[new_cluster] = (n/(n+1))*negative_sse[new_cluster] + (1/(n+1)) * (pt-new_mean) * (pt-old_mean)
+                        negative_centers[new_cluster] = new_mean
                         cluster_stats[new_cluster][1] += 1
 
                     else:
-                        positive_centers[new_cluster] = (p/(p+1))*positive_centers[new_cluster] + (1/(p+1)) * pt
+                        new_mean = (p/(p+1))*positive_centers[new_cluster] + (1/(p+1)) * pt
+                        old_mean = positive_centers[new_cluster]
+                        positive_sse[new_cluster] = (p/(p+1))*positive_sse[new_cluster] + (1/(p+1)) * (pt-new_mean) * (pt-old_mean)
+                        positive_centers[new_cluster] = new_mean
                         cluster_stats[new_cluster][0] += 1
+
                     labels[index_point] = new_cluster
 
         for idp in range(N):
             pt = data_points[idp]
             cluster_id = labels[idp]
             errors[iteration][cluster_id] += beta*compute_euclidean_distance(pt, centers[cluster_id])-alpha*compute_euclidean_distance(positive_centers[cluster_id],\
-                                                negative_centers[cluster_id])
+                                                negative_centers[cluster_id])/(positive_sse[cluster_id] + negative_sse[cluster_id])
 
         # Store best clustering
         f1, roc, m, l = get_new_accuracy(data_points, labels, y, classifier)
