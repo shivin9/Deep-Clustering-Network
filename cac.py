@@ -1,8 +1,6 @@
 import numpy as np
 from sklearn.cluster import KMeans
 from joblib import Parallel, delayed
-from cac_main import specificity, sensitivity, best_threshold, cac,\
-compute_euclidean_distance, calculate_gamma_old, calculate_gamma_new
 import umap
 from matplotlib import pyplot as plt
 from sklearn.metrics import adjusted_rand_score as ari
