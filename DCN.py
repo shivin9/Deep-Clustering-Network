@@ -13,6 +13,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.metrics import davies_bouldin_score as dbs, adjusted_rand_score as ari
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, f1_score, roc_auc_score, roc_curve, matthews_corrcoef as mcc
 from sklearn.linear_model import LogisticRegression, Perceptron, SGDClassifier, RidgeClassifier
 from matplotlib import pyplot as plt
 
@@ -113,7 +114,17 @@ class DCN(nn.Module):
                 diff_vec = positive_clusters[cluster_id[i]] - negative_clusters[cluster_id[i]]
                 sample_sep_loss = torch.matmul(diff_vec.view(1, -1),
                                                 diff_vec.view(-1, 1))
-                sep_loss -= self.args.alpha * torch.squeeze(sample_sep_loss)
+                sep_loss -= np.log(self.args.alpha * torch.squeeze(sample_sep_loss))
+        
+        for j in range(self.args.n_clusters):
+            diff_vec = positive_clusters[j] - negative_clusters[j]
+            sample_sep_loss = torch.matmul(diff_vec.view(1, -1),
+                                            diff_vec.view(-1, 1))
+            sample_sep_loss = torch.squeeze(sample_sep_loss)
+            print("Class Dist: ", np.log(sample_sep_loss))
+
+        print("KM Dist: ", km_loss)
+        print("Sep Dist: ", sep_loss)
 
         return (rec_loss + km_loss + sep_loss,
                 rec_loss.detach().cpu().numpy(),
@@ -167,10 +178,10 @@ class DCN(nn.Module):
             data = data.to(self.device).view(batch_size, -1)
             latent_X = self.autoencoder(data, latent=True)
             batch_X.append(latent_X.detach().cpu().numpy())
-            batch_y.append(y)
+            batch_y.extend(y.detach().cpu().numpy())
 
         batch_X = np.vstack(batch_X)
-        batch_y = np.vstack(batch_y)
+        batch_y = np.array(batch_y)
 
         self.clustering.init_cluster(batch_X, batch_y)
         return None
@@ -183,6 +194,10 @@ class DCN(nn.Module):
         for batch_idx, (data, y) in enumerate(train_loader):
             batch_size = data.size()[0]
             data = data.view(batch_size, -1).to(self.device)
+
+            # Collect training data and labels for the later classifier
+            X_train.append(data.cpu().numpy())
+            y_train.extend(y.numpy())
             
             # Get the latent features
             with torch.no_grad():
@@ -191,10 +206,6 @@ class DCN(nn.Module):
 
             if self.args.clustering == "cac":
                 cluster_id = self.clustering.cluster(latent_X, y, self.args.beta, self.args.alpha)
-                # Collect training data and labels for the later classifier
-                X_train.append(latent_X)
-                y_train.extend(y.numpy())
-                cluster_ids_train.extend(cluster_id)
 
             else:
                 # [Step-1] Update the assignment results
@@ -217,39 +228,58 @@ class DCN(nn.Module):
             loss.backward()
             self.optimizer.step()
 
-            if verbose and (batch_idx+1) % self.args.log_interval == 0:
-                msg = 'Epoch: {:02d} | Batch: {:03d} | Loss: {:.3f} | Rec-' \
-                      'Loss: {:.3f} | Dist-Loss: {:.3f}'
-                print(msg.format(epoch, batch_idx+1, 
-                                 loss.detach().cpu().numpy(),
-                                 rec_loss, dist_loss))
+#             if verbose and (batch_idx+1) % self.args.log_interval == 0:
+            msg = 'Epoch: {:02d} | Batch: {:03d} | Loss: {:.3f} | Rec-' \
+                  'Loss: {:.3f} | Dist-Loss: {:.3f}'
+            print(msg.format(epoch, batch_idx+1, 
+                             loss.detach().cpu().numpy(),
+                             rec_loss, dist_loss))
 
-        cluster_ids_train = np.array(cluster_ids_train)
-        y_train = np.array(y_train)
+        X_train = np.vstack(X_train)
+        self.eval()
         if self.args.clustering == "cac":
-            X_train = np.vstack(X_train)
+            with torch.no_grad():
+                latent_X_train = self.autoencoder(torch.FloatTensor(np.array(X_train)).to(self.args.device), latent=True)
+                latent_X_train = latent_X_train.to(self.args.device).numpy()
+
+            cluster_ids_train = self.clustering.update_assign(latent_X_train)
+            y_train = np.array(y_train)
+            X_train = latent_X_train
+            
             print("Training Base classifier")
             classifier = self.get_classifier(self.classifier)
             classifier.fit(X_train, y_train)
             self.base_classifier.append(classifier)
-            print("Base Training F1:", f1_score(y_train, classifier.predict(X_train)))
+            print("Base Training F1:", f1_score(y_train, classifier.predict(X_train).ravel()))
+            print("Base Training MCC:", mcc(y_train, classifier.predict(X_train).ravel()))
             print("Base Training AUC:", roc_auc_score(y_train, classifier.predict_proba(X_train)[:,1]))
 
             print("Training CAC classifiers")
 
             self.cluster_classifiers.append([])
-
+            y_pred = []
+            y_true = []
+            y_pred_proba = []
             for j in range(self.args.n_clusters):
                 cluster_indices = np.where(cluster_ids_train == j)[0]
                 X_cluster = X_train[cluster_indices]
                 y_cluster = y_train[cluster_indices]
+                y_true.extend(y_cluster)
                 classifier = self.get_classifier(self.classifier)
                 if np.unique(y_cluster).shape[0] > 1:
                     classifier.fit(X_cluster, y_cluster.ravel())
                     print("CAC Training F1:", f1_score(y_cluster, classifier.predict(X_cluster)))
+                    print("CAC Training MCC:", mcc(y_cluster, classifier.predict(X_cluster)))
                     print("CAC Training AUC:", roc_auc_score(y_cluster, classifier.predict_proba(X_cluster)[:,1]))
-                    print("\n")
+                    y_pred.extend(classifier.predict(X_cluster))
+                    y_pred_proba.extend(classifier.predict_proba(X_cluster)[:,1])
                 else:
                     print("Fitting random classifier, Iteration:", j)
-                    classifier.fit(X_cluster, np.random.randint(2,size=y_cluster.shape[0]))
+                    tmp = np.random.randint(2,size=y_cluster.shape[0])
+                    y_pred.extend(tmp)
+                    y_pred_proba.extend(tmp)
+                    classifier.fit(X_cluster, tmp)
                 self.cluster_classifiers[-1].append(classifier)
+            print("Final CAC Training F1:", f1_score(y_true, y_pred))
+            print("Final CAC Training MCC:", mcc(y_true, y_pred))
+            print("Final CAC Training AUC:", roc_auc_score(y_true, y_pred_proba))

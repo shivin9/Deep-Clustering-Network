@@ -64,7 +64,8 @@ class batch_cac(object):
         lbls = []
         lbls.append(np.copy(labels))
 
-#         self.update_cluster_centers(X, y, labels)
+        if len(np.unique(y)) == 1:
+            return cluster_stats, labels, centers, positive_centers, negative_centers
 
         for iteration in range(total_iterations):
             N = len(X)
@@ -138,6 +139,9 @@ class batch_cac(object):
     def cluster(self, X, y, beta, alpha):
         # Update assigned cluster labels to points
         cluster_labels = self.predict_clusters(X, self.clusters)
+
+        # Do we need this really? ... yes
+        self.update_cluster_centers(X, y, cluster_labels)
 
         # update cluster centers
         self.cluster_stats, new_labels, self.clusters, self.positive_centers, self.negative_centers = self.update(X, y, self.cluster_stats, cluster_labels,\
